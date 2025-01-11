@@ -1,0 +1,55 @@
+[package]
+name = "pallet-on-demand"
+authors = ["RegionX"]
+version = "0.1.0"
+license = "MIT"
+edition = "2021"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+codec = { workspace = true, default-features = false, features = ["derive"] }
+scale-info = { workspace = true, default-features = false, features = ["derive"] }
+
+# Substrate
+frame = { workspace = true, default-features = false, features = ["experimental", "runtime"] }
+frame-benchmarking = { workspace = true, default-features = false, optional = true }
+sp-runtime = { workspace = true, default-features = false }
+frame-support = { workspace = true, default-features = false }
+
+# Polkadot
+polkadot-runtime-parachains = { workspace = true, default-features = false }
+
+# Cumulus
+cumulus-pallet-parachain-system = { workspace = true, default-features = false }
+
+# Local
+order-primitives = { workspace = true, default-features = false }
+
+[dev-dependencies]
+sp-core = { workspace = true, default-features = false }
+pallet-balances = { workspace = true, default-features = false }
+serde = { workspace = true }
+smallvec = { workspace = true }
+		
+[features]
+default = ["std"]
+runtime-benchmarks = [
+	"frame-benchmarking/runtime-benchmarks",
+	"frame/runtime-benchmarks"
+]
+std = [
+	"codec/std",
+	"scale-info/std",
+	"frame/std",
+	"frame-support/std",
+	"frame-benchmarking/std",
+	"sp-runtime/std",
+	"sp-core/std",
+	"pallet-balances/std",
+	"order-primitives/std",
+	"cumulus-pallet-parachain-system/std",
+	"polkadot-runtime-parachains/std",
+]
+try-runtime = ["frame/try-runtime"]
