@@ -37,7 +37,7 @@ sp-keystore = { workspace = true, default-features = true }
 sp-runtime = { workspace = true, default-features = true }
 sp-timestamp = { workspace = true, default-features = true }
 sp-state-machine = { workspace = true, default-features = true }
-prometheus-endpoint = { name = "substrate-prometheus-endpoint", default-features = false, version = "2.1.2" }
+substrate-prometheus-endpoint = { workspace = true, default-features = true }
 
 # Cumulus
 cumulus-client-consensus-common = { workspace = true, default-features = true }
