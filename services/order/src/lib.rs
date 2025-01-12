@@ -16,7 +16,7 @@ use cumulus_primitives_core::{
 };
 use cumulus_relay_chain_interface::{RelayChainInterface, RelayChainResult};
 use futures::{pin_mut, select, FutureExt, Stream, StreamExt};
-use on_demand_primitives::{
+use order_primitives::{
 	well_known_keys::{account, ON_DEMAND_QUEUE},
 	EnqueuedOrder,
 };

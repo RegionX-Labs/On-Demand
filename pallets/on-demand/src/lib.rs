@@ -33,7 +33,7 @@ pub mod pallet {
 	use cumulus_pallet_parachain_system::{
 		relay_state_snapshot::Error as RelayError, RelayChainStateProof, RelaychainStateProvider,
 	};
-	use on_demand_primitives::{well_known_keys::EVENTS, OrderInherentData};
+	use order_primitives::{well_known_keys::EVENTS, OrderInherentData};
 	use sp_runtime::traits::AtLeast32BitUnsigned;
 
 	/// The module configuration trait.
@@ -146,7 +146,7 @@ pub mod pallet {
 		type Error = MakeFatalError<()>;
 
 		const INHERENT_IDENTIFIER: InherentIdentifier =
-			on_demand_primitives::ON_DEMAND_INHERENT_IDENTIFIER;
+			order_primitives::ON_DEMAND_INHERENT_IDENTIFIER;
 
 		fn create_inherent(data: &InherentData) -> Option<Self::Call> {
 			let data: OrderInherentData<AccountIdOf<T::OnDemandConfig>> = data

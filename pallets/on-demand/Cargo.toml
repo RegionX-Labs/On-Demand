@@ -13,7 +13,6 @@ codec = { workspace = true, default-features = false, features = ["derive"] }
 scale-info = { workspace = true, default-features = false, features = ["derive"] }
 
 # Substrate
-frame = { workspace = true, default-features = false, features = ["experimental", "runtime"] }
 frame-benchmarking = { workspace = true, default-features = false, optional = true }
 sp-runtime = { workspace = true, default-features = false }
 frame-support = { workspace = true, default-features = false }
@@ -37,12 +36,10 @@ smallvec = { workspace = true }
 default = ["std"]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
-	"frame/runtime-benchmarks"
 ]
 std = [
 	"codec/std",
 	"scale-info/std",
-	"frame/std",
 	"frame-support/std",
 	"frame-benchmarking/std",
 	"sp-runtime/std",
@@ -52,4 +49,4 @@ std = [
 	"cumulus-pallet-parachain-system/std",
 	"polkadot-runtime-parachains/std",
 ]
-try-runtime = ["frame/try-runtime"]
+try-runtime = []

@@ -11,7 +11,7 @@ use crate::chain::polkadot::{
 use codec::{Codec, Decode};
 use cumulus_primitives_core::{relay_chain::CoreIndex, ParaId};
 use cumulus_relay_chain_interface::RelayChainInterface;
-use on_demand_primitives::well_known_keys::{
+use order_primitives::well_known_keys::{
 	core_descriptor, para_lifecycle, ACTIVE_CONFIG, QUEUE_STATUS,
 };
 use polkadot_runtime_parachains::{configuration::HostConfiguration, ParaLifecycle};

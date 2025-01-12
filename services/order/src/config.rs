@@ -4,7 +4,7 @@ use crate::RelayBlockNumber;
 use codec::{Codec, Decode};
 use cumulus_primitives_core::ConsensusEngineId;
 use cumulus_relay_chain_interface::{PHash, RelayChainInterface};
-use on_demand_primitives::{OnDemandRuntimeApi, ThresholdParameterT};
+use order_primitives::{OnDemandRuntimeApi, ThresholdParameterT};
 use sc_client_api::UsageProvider;
 use sc_service::Arc;
 use sc_transaction_pool_api::MaintainedTransactionPool;
