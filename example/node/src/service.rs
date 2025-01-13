@@ -31,7 +31,7 @@ use cumulus_relay_chain_interface::{BlockNumber, OverseerHandle, RelayChainInter
 // Substrate Imports
 use codec::Encode;
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
-use on_demand_primitives::OnDemandRuntimeApi;
+use order_primitives::OnDemandRuntimeApi;
 use on_demand_service::config::{OnDemandSlot, OrderInherentData};
 use pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi;
 use polkadot_primitives::Balance;

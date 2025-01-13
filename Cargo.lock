@@ -6255,6 +6255,7 @@ dependencies = [
  "cumulus-pallet-parachain-system",
  "frame-benchmarking",
  "frame-support",
+ "frame-system",
  "order-primitives",
  "pallet-balances",
  "parity-scale-codec",

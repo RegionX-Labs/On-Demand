@@ -4,7 +4,9 @@
 
 extern crate alloc;
 
-use frame::{prelude::*, traits::Currency};
+use frame_support::pallet_prelude::*;
+use frame_support::traits::Currency;
+use frame_system::pallet_prelude::*;
 use polkadot_runtime_parachains::on_demand;
 
 pub use pallet::*;
@@ -26,14 +28,19 @@ type BalanceOf<T> = <<T as on_demand::Config>::Currency as Currency<
 >>::Balance;
 type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
-#[frame::pallet]
+#[frame_support::pallet]
 pub mod pallet {
     use super::*;
-    use crate::{frame_system::EventRecord, weights::WeightInfo};
+    use crate::weights::WeightInfo;
+    use codec::MaxEncodedLen;
+    use codec::{Decode, Encode};
     use cumulus_pallet_parachain_system::{
         relay_state_snapshot::Error as RelayError, RelayChainStateProof, RelaychainStateProvider,
     };
+    use frame_support::DefaultNoBound;
+    use frame_system::EventRecord;
     use order_primitives::{well_known_keys::EVENTS, OrderInherentData};
+    use scale_info::TypeInfo;
     use sp_runtime::traits::AtLeast32BitUnsigned;
 
     /// The module configuration trait.
@@ -84,13 +91,6 @@ pub mod pallet {
 
     #[pallet::pallet]
     pub struct Pallet<T>(_);
-
-    /// Order sequence number.
-    ///
-    /// Gets increased every time
-    #[pallet::storage]
-    #[pallet::getter(fn slot_width)]
-    pub type SlotWidth<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
 
     /// Defines how often a new on-demand order is created, based on the number of slots.
     ///

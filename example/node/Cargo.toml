@@ -88,7 +88,7 @@ prometheus-endpoint.default-features = true
 polkadot-cli = { features = ["rococo-native"], workspace = true, default-features = true }
 polkadot-primitives.workspace = true
 polkadot-primitives.default-features = true
-xcm.workspace = true
+staging-xcm.workspace = true
 cumulus-client-cli.workspace = true
 cumulus-client-cli.default-features = true
 cumulus-client-collator.workspace = true
@@ -123,7 +123,7 @@ std = [
 	"log/std",
 	"parachain-example-runtime/std",
 	"order-primitives/std",
-	"xcm/std",
+	"staging-xcm/std",
 ]
 runtime-benchmarks = [
 	"cumulus-primitives-core/runtime-benchmarks",

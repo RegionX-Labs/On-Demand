@@ -28,6 +28,7 @@ tracing = { version = "0.1.37", default-features = false }
 
 # Substrate
 
+frame = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 frame-benchmarking = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 frame-support = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 frame-system = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
