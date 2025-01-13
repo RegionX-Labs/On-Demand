@@ -1,4 +1,6 @@
-use parachain_example_runtime as runtime;
+use polkadot_sdk::*;
+
+use parachain_template_runtime as runtime;
 use sc_chain_spec::{ChainSpecExtension, ChainSpecGroup};
 use sc_service::ChainType;
 use serde::{Deserialize, Serialize};
@@ -24,7 +26,7 @@ impl Extensions {
 	}
 }
 
-pub fn development_config() -> ChainSpec {
+pub fn development_chain_spec() -> ChainSpec {
 	// Give your base currency a unit name and decimal places
 	let mut properties = sc_chain_spec::Properties::new();
 	properties.insert("tokenSymbol".into(), "UNIT".into());
@@ -36,7 +38,7 @@ pub fn development_config() -> ChainSpec {
 		Extensions {
 			relay_chain: "rococo-local".into(),
 			// You MUST set this to the correct network!
-			para_id: 2000,
+			para_id: 1000,
 		},
 	)
 	.with_name("Development")
@@ -46,7 +48,7 @@ pub fn development_config() -> ChainSpec {
 	.build()
 }
 
-pub fn local_testnet_config() -> ChainSpec {
+pub fn local_chain_spec() -> ChainSpec {
 	// Give your base currency a unit name and decimal places
 	let mut properties = sc_chain_spec::Properties::new();
 	properties.insert("tokenSymbol".into(), "UNIT".into());
@@ -59,7 +61,7 @@ pub fn local_testnet_config() -> ChainSpec {
 		Extensions {
 			relay_chain: "rococo-local".into(),
 			// You MUST set this to the correct network!
-			para_id: 2000,
+			para_id: 1000,
 		},
 	)
 	.with_name("Local Testnet")

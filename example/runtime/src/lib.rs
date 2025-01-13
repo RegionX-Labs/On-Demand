@@ -16,8 +16,11 @@ mod weights;
 extern crate alloc;
 use alloc::vec::Vec;
 use smallvec::smallvec;
+
+use polkadot_sdk::{staging_parachain_info as parachain_info, *};
+
 use sp_runtime::{
-	create_runtime_str, generic, impl_opaque_keys,
+	generic, impl_opaque_keys,
 	traits::{BlakeTwo256, IdentifyAccount, Verify},
 	MultiSignature,
 };
@@ -32,9 +35,6 @@ use frame_support::weights::{
 };
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 pub use sp_runtime::{MultiAddress, Perbill, Permill};
-
-#[cfg(any(feature = "std", test))]
-pub use sp_runtime::BuildStorage;
 
 use weights::ExtrinsicBaseWeight;
 
@@ -72,11 +72,9 @@ pub type SignedBlock = generic::SignedBlock<Block>;
 /// BlockId type as expected by this runtime.
 pub type BlockId = generic::BlockId<Block>;
 
-pub type ThresholdParameter = Balance;
-
-/// The SignedExtension to the basic transaction logic.
+/// The extension to the basic transaction logic.
 #[docify::export(template_signed_extra)]
-pub type SignedExtra = (
+pub type TxExtension = (
 	frame_system::CheckNonZeroSender<Runtime>,
 	frame_system::CheckSpecVersion<Runtime>,
 	frame_system::CheckTxVersion<Runtime>,
@@ -91,7 +89,7 @@ pub type SignedExtra = (
 
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic =
-	generic::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
+	generic::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
 /// All migrations of the runtime, aside from the ones declared in the pallets.
 ///
@@ -142,12 +140,11 @@ impl WeightToFeePolynomial for WeightToFee {
 /// to even the core data structures.
 pub mod opaque {
 	use super::*;
-	use sp_runtime::{
+	pub use polkadot_sdk::sp_runtime::OpaqueExtrinsic as UncheckedExtrinsic;
+	use polkadot_sdk::sp_runtime::{
 		generic,
 		traits::{BlakeTwo256, Hash as HashT},
 	};
-
-	pub use sp_runtime::OpaqueExtrinsic as UncheckedExtrinsic;
 
 	/// Opaque block header type.
 	pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
@@ -167,20 +164,25 @@ impl_opaque_keys! {
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: create_runtime_str!("parachain-example-runtime"),
-	impl_name: create_runtime_str!("parachain-example-runtime"),
+	spec_name: alloc::borrow::Cow::Borrowed("parachain-template-runtime"),
+	impl_name: alloc::borrow::Cow::Borrowed("parachain-template-runtime"),
 	authoring_version: 1,
 	spec_version: 1,
 	impl_version: 0,
 	apis: apis::RUNTIME_API_VERSIONS,
 	transaction_version: 1,
-	state_version: 1,
+	system_version: 1,
 };
 
 #[docify::export]
 mod block_times {
+	/// This determines the average expected block time that we are targeting. Blocks will be
+	/// produced at a minimum duration defined by `SLOT_DURATION`. `SLOT_DURATION` is picked up by
+	/// `pallet_timestamp` which is in turn picked up by `pallet_aura` to implement `fn
+	/// slot_duration()`.
+	///
 	/// Change this to adjust the block time.
-	pub const MILLI_SECS_PER_BLOCK: u64 = 12000;
+	pub const MILLI_SECS_PER_BLOCK: u64 = 6000;
 
 	// NOTE: Currently it is not possible to change the slot duration after the chain has started.
 	// Attempting to do so will brick block production.
@@ -212,7 +214,7 @@ const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 #[docify::export(max_block_weight)]
 /// We allow for 2 seconds of compute with a 6 second average block time.
 const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_parts(
-	WEIGHT_REF_TIME_PER_SECOND.saturating_div(2),
+	WEIGHT_REF_TIME_PER_SECOND.saturating_mul(2),
 	cumulus_primitives_core::relay_chain::MAX_POV_SIZE as u64,
 );
 
@@ -220,7 +222,7 @@ const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_parts(
 mod async_backing_params {
 	/// Maximum number of blocks simultaneously accepted by the Runtime, not yet included
 	/// into the relay chain.
-	pub(crate) const UNINCLUDED_SEGMENT_CAPACITY: u32 = 1;
+	pub(crate) const UNINCLUDED_SEGMENT_CAPACITY: u32 = 3;
 	/// How many parachain blocks are processed by the relay chain per parent. Limits the
 	/// number of blocks authored per slot.
 	pub(crate) const BLOCK_PROCESSING_VELOCITY: u32 = 1;
@@ -268,7 +270,7 @@ mod runtime {
 	#[runtime::pallet_index(2)]
 	pub type Timestamp = pallet_timestamp;
 	#[runtime::pallet_index(3)]
-	pub type ParachainInfo = staging_parachain_info;
+	pub type ParachainInfo = parachain_info;
 
 	// Monetary stuff.
 	#[runtime::pallet_index(10)]
@@ -302,9 +304,9 @@ mod runtime {
 	#[runtime::pallet_index(33)]
 	pub type MessageQueue = pallet_message_queue;
 
-	// On-demand
-	#[runtime::pallet_index(40)]
-	pub type OnDemand = pallet_on_demand;
+	// Template
+	#[runtime::pallet_index(50)]
+	pub type TemplatePallet = pallet_parachain_template;
 }
 
 #[docify::export(register_validate_block)]
