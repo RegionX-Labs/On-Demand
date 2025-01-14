@@ -8,6 +8,7 @@ use frame_support::pallet_prelude::*;
 use frame_support::traits::Currency;
 use frame_system::pallet_prelude::*;
 use polkadot_runtime_parachains::on_demand;
+use sp_runtime::SaturatedConversion;
 
 pub use pallet::*;
 
@@ -27,10 +28,6 @@ type BalanceOf<T> = <<T as on_demand::Config>::Currency as Currency<
     <T as frame_system::Config>::AccountId,
 >>::Balance;
 type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
-
-pub trait OrderPlacer<AccountId> {
-    fn order_placer() -> AccountId;
-}
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -83,21 +80,27 @@ pub mod pallet {
         /// Type for getting the current relay chain state.
         type RelayChainStateProvider: RelaychainStateProvider;
 
-        /// Weight Info
-        type WeightInfo: WeightInfo;
+        /// The maximum number of authorities that the pallet can hold.
+        type MaxAuthorities: Get<u32>;
 
         /// Relay chain on demand config.
         type OnDemandConfig: polkadot_runtime_parachains::on_demand::Config + Parameter + Member;
 
-        /// Type for getting the current supposed order placer.
-        type OrderPlacer: OrderPlacer<AccountIdOf<Self::OnDemandConfig>>;
-
         #[cfg(feature = "runtime-benchmarks")]
         type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
+
+        /// Weight Info
+        type WeightInfo: WeightInfo;
     }
 
     #[pallet::pallet]
     pub struct Pallet<T>(_);
+
+    /// The authorities for the current on-demand slot.
+    #[pallet::storage]
+    #[pallet::getter(fn authorities)]
+    pub type Authorities<T: Config> =
+        StorageValue<_, BoundedVec<AccountIdOf<T::OnDemandConfig>, T::MaxAuthorities>, ValueQuery>;
 
     /// Defines how often a new on-demand order is created, based on the number of slots.
     ///
@@ -106,7 +109,7 @@ pub mod pallet {
     /// placed.
     #[pallet::storage]
     #[pallet::getter(fn slot_width)]
-    pub type SlotWidth<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
+    pub type SlotWidth<T: Config> = StorageValue<_, u32, ValueQuery>;
 
     /// The threshold parameter stored in the runtime state.
     ///
@@ -119,7 +122,7 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// Configuration of the coretime chain was set.
-        SlotWidthSet { width: T::BlockNumber },
+        SlotWidthSet { width: u32 },
         /// Threshold parameter set.
         ThresholdParameterSet { parameter: T::ThresholdParameter },
     }
@@ -214,17 +217,21 @@ pub mod pallet {
                                 spot_price,
                                 ordered_by,
                             },
-                        ) if para_id == data.para_id => {
-                            Some((spot_price, ordered_by))
-                        }
+                        ) if para_id == data.para_id => Some((spot_price, ordered_by)),
                         _ => None,
                     })
                     .collect();
 
-            let order_placer = T::OrderPlacer::order_placer();
-            let Some(order) = result.into_iter().find(|(_, ordered_by)| *ordered_by == order_placer) else {
+            let Some(order_placer) = Self::order_placer() else {
+                return Ok(().into());
+            };
+
+            let Some(order) = result
+                .into_iter()
+                .find(|(_, ordered_by)| *ordered_by == order_placer)
+            else {
                 // TODO: is there anything to do?
-                return Ok(().into())
+                return Ok(().into());
             };
 
             Ok(().into())
@@ -236,7 +243,7 @@ pub mod pallet {
         /// - `width`: The slot width in relay chain blocks.
         #[pallet::call_index(1)]
         #[pallet::weight(T::WeightInfo::set_slot_width())]
-        pub fn set_slot_width(origin: OriginFor<T>, width: T::BlockNumber) -> DispatchResult {
+        pub fn set_slot_width(origin: OriginFor<T>, width: u32) -> DispatchResult {
             T::AdminOrigin::ensure_origin_or_root(origin)?;
 
             SlotWidth::<T>::set(width.clone());
@@ -261,6 +268,19 @@ pub mod pallet {
             Self::deposit_event(Event::ThresholdParameterSet { parameter });
 
             Ok(())
+        }
+    }
+
+    impl<T: Config> Pallet<T> {
+        fn order_placer() -> Option<AccountIdOf<T::OnDemandConfig>> {
+            let slot_width = SlotWidth::<T>::get();
+            let para_height = frame_system::Pallet::<T>::block_number();
+            let authorities = Authorities::<T>::get();
+
+            let slot: u128 = (para_height >> slot_width).saturated_into();
+            let indx = slot % authorities.len() as u128;
+
+            authorities.get(indx as usize).cloned()
         }
     }
 }

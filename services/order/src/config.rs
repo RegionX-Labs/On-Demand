@@ -125,8 +125,8 @@ where
             .map_err(Box::new)?;
         let slot_width = para.runtime_api().slot_width(para_hash).map_err(Box::new)?;
 
-        // Given that anyone can purchase on-demand, it isn't a problem. However, if we were to 
-        // rely solely on collators to place orders and determine the orderer based on 
+        // Given that anyone can purchase on-demand, it isn't a problem. However, if we were to
+        // rely solely on collators to place orders and determine the orderer based on
         // `para_height` there is the possibility of stalling with a single malicious collator.
 
         // Taken from: https://github.com/paritytech/polkadot-sdk/issues/1487
