@@ -27,7 +27,6 @@ pub use benchmarking::BenchmarkHelper;
 type BalanceOf<T> = <<T as on_demand::Config>::Currency as Currency<
     <T as frame_system::Config>::AccountId,
 >>::Balance;
-type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -42,11 +41,12 @@ pub mod pallet {
     use frame_system::EventRecord;
     use order_primitives::{well_known_keys::EVENTS, OrderInherentData};
     use scale_info::TypeInfo;
-    use sp_runtime::traits::AtLeast32BitUnsigned;
+    use sp_runtime::traits::{AtLeast32BitUnsigned, Convert};
+    use sp_runtime::RuntimeAppPublic;
 
     /// The module configuration trait.
     #[pallet::config]
-    pub trait Config: frame_system::Config {
+    pub trait Config: frame_system::Config + pallet_aura::Config + pallet_session::Config {
         /// The overarching event type.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -80,11 +80,10 @@ pub mod pallet {
         /// Type for getting the current relay chain state.
         type RelayChainStateProvider: RelaychainStateProvider;
 
-        /// The maximum number of authorities that the pallet can hold.
-        type MaxAuthorities: Get<u32>;
-
         /// Relay chain on demand config.
-        type OnDemandConfig: polkadot_runtime_parachains::on_demand::Config + Parameter + Member;
+        type OnDemandConfig: polkadot_runtime_parachains::on_demand::Config<AccountId = Self::AccountId>
+            + Parameter
+            + Member;
 
         #[cfg(feature = "runtime-benchmarks")]
         type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
@@ -100,7 +99,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn authorities)]
     pub type Authorities<T: Config> =
-        StorageValue<_, BoundedVec<AccountIdOf<T::OnDemandConfig>, T::MaxAuthorities>, ValueQuery>;
+        StorageValue<_, BoundedVec<T::AuthorityId, T::MaxAuthorities>, ValueQuery>;
 
     /// Defines how often a new on-demand order is created, based on the number of slots.
     ///
@@ -150,6 +149,18 @@ pub mod pallet {
         }
     }
 
+    // NOTE: always place pallet-on-demand after the aura pallet.
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_finalize(_: BlockNumberFor<T>) {
+            // Update to the latest AuRa authorities.
+            //
+            // By updating the authorities on finalize we will always have the previous set
+            // from the previous block used within this pallet.
+            Authorities::<T>::put(pallet_aura::Authorities::<T>::get());
+        }
+    }
+
     #[pallet::inherent]
     impl<T: Config> ProvideInherent for Pallet<T> {
         type Call = Call<T>;
@@ -159,7 +170,7 @@ pub mod pallet {
             order_primitives::ON_DEMAND_INHERENT_IDENTIFIER;
 
         fn create_inherent(data: &InherentData) -> Option<Self::Call> {
-            let data: OrderInherentData<AccountIdOf<T::OnDemandConfig>> = data
+            let data: OrderInherentData<T::AccountId> = data
                 .get_data(&Self::INHERENT_IDENTIFIER)
                 .ok()
                 .flatten()
@@ -185,7 +196,7 @@ pub mod pallet {
         #[pallet::weight((0, DispatchClass::Mandatory))]
         pub fn create_order(
             origin: OriginFor<T>,
-            data: OrderInherentData<AccountIdOf<T::OnDemandConfig>>,
+            data: OrderInherentData<T::AccountId>,
         ) -> DispatchResultWithPostInfo {
             ensure_none(origin)?;
 
@@ -207,29 +218,34 @@ pub mod pallet {
                 })
                 .unwrap(); // TODO
 
-            let result: Vec<(BalanceOf<T::OnDemandConfig>, AccountIdOf<T::OnDemandConfig>)> =
-                events
-                    .into_iter()
-                    .filter_map(|item| match item.event {
-                        RelayChainEvent::<T::OnDemandConfig>::OnDemandAssignmentProvider(
-                            on_demand::Event::OnDemandOrderPlaced {
-                                para_id,
-                                spot_price,
-                                ordered_by,
-                            },
-                        ) if para_id == data.para_id => Some((spot_price, ordered_by)),
-                        _ => None,
-                    })
-                    .collect();
+            let result: Vec<(BalanceOf<T::OnDemandConfig>, T::AccountId)> = events
+                .into_iter()
+                .filter_map(|item| match item.event {
+                    RelayChainEvent::<T::OnDemandConfig>::OnDemandAssignmentProvider(
+                        on_demand::Event::OnDemandOrderPlaced {
+                            para_id,
+                            spot_price,
+                            ordered_by,
+                        },
+                    ) if para_id == data.para_id => Some((spot_price, ordered_by)),
+                    _ => None,
+                })
+                .collect();
 
             let Some(order_placer) = Self::order_placer() else {
                 return Ok(().into());
             };
+            let order_placer_acc = pallet_session::KeyOwner::<T>::get((
+                sp_application_crypto::key_types::AURA,
+                order_placer.to_raw_vec(),
+            ))
+            .unwrap(); // TODO
 
-            let Some(order) = result
-                .into_iter()
-                .find(|(_, ordered_by)| *ordered_by == order_placer)
-            else {
+            let Some(order) = result.into_iter().find(|(_, ordered_by)| {
+                // In most implementations the validator id is same as account id.
+                <T as pallet_session::Config>::ValidatorIdOf::convert(ordered_by.clone())
+                    == Some(order_placer_acc.clone())
+            }) else {
                 // TODO: is there anything to do?
                 return Ok(().into());
             };
@@ -242,7 +258,7 @@ pub mod pallet {
         /// - `origin`: Must be Root or pass `AdminOrigin`.
         /// - `width`: The slot width in relay chain blocks.
         #[pallet::call_index(1)]
-        #[pallet::weight(T::WeightInfo::set_slot_width())]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::set_slot_width())]
         pub fn set_slot_width(origin: OriginFor<T>, width: u32) -> DispatchResult {
             T::AdminOrigin::ensure_origin_or_root(origin)?;
 
@@ -257,7 +273,7 @@ pub mod pallet {
         /// - `origin`: Must be Root or pass `AdminOrigin`.
         /// - `parameter`: The threshold parameter.
         #[pallet::call_index(2)]
-        #[pallet::weight(T::WeightInfo::set_threshold_parameter())]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::set_threshold_parameter())]
         pub fn set_threshold_parameter(
             origin: OriginFor<T>,
             parameter: T::ThresholdParameter,
@@ -272,7 +288,7 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn order_placer() -> Option<AccountIdOf<T::OnDemandConfig>> {
+        fn order_placer() -> Option<T::AuthorityId> {
             let slot_width = SlotWidth::<T>::get();
             let para_height = frame_system::Pallet::<T>::block_number();
             let authorities = Authorities::<T>::get();
