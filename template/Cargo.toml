@@ -10,14 +10,14 @@ members = ["node", "pallets/template", "runtime"]
 resolver = "2"
 
 [workspace.dependencies]
-codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false }
+codec = { package = "parity-scale-codec", version = "3.6.12", default-features = false }
 clap = { version = "4.5.13" }
 color-print = { version = "0.3.4" }
 docify = { version = "0.2.9" }
-log = { version = "0.4.20", default-features = false }
-scale-info = { version = "2.11.3", default-features = false }
+log = { version = "0.4.22", default-features = false }
+scale-info = { version = "2.11.1", default-features = false }
 hex-literal = "0.4.1"
-serde = { version = "1.0.201", default-features = false }
+serde = { version = "1.0.214", default-features = false }
 smallvec = "1.11.0"
 serde_json = { version = "1.0.132", default-features = false }
 futures = { version = "0.3.31" }
@@ -28,7 +28,7 @@ frame = { package = "polkadot-sdk-frame", git = "https://github.com/paritytech/p
 prometheus-endpoint = { package = "substrate-prometheus-endpoint", git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 
 sc-tracing = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
-cumulus-pallet-parachain-system = {  git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
+cumulus-pallet-parachain-system = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 
 substrate-wasm-builder = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 

@@ -26,7 +26,7 @@ docify = { workspace = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc"] }
 
 # Local
-pallet-parachain-template = { workspace = true }
+pallet-parachain-template = { workspace = true, default-features = false }
 
 polkadot-sdk = { workspace = true, default-features = false, features = [
 	"pallet-aura",

@@ -28,6 +28,10 @@ type BalanceOf<T> = <<T as on_demand::Config>::Currency as Currency<
 >>::Balance;
 type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
+pub trait OrderPlacer<AccountId> {
+    fn order_placer() -> AccountId;
+}
+
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
@@ -84,6 +88,9 @@ pub mod pallet {
 
         /// Relay chain on demand config.
         type OnDemandConfig: polkadot_runtime_parachains::on_demand::Config + Parameter + Member;
+
+        /// Type for getting the current supposed order placer.
+        type OrderPlacer: OrderPlacer<AccountIdOf<Self::OnDemandConfig>>;
 
         #[cfg(feature = "runtime-benchmarks")]
         type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
@@ -207,29 +214,18 @@ pub mod pallet {
                                 spot_price,
                                 ordered_by,
                             },
-                        ) if para_id == data.para_id && ordered_by == data.author_pub => {
+                        ) if para_id == data.para_id => {
                             Some((spot_price, ordered_by))
                         }
                         _ => None,
                     })
                     .collect();
 
-            // TODO: Actually the order creator and the author will unlikely be the same account....
-            // If we track slots we should be able to determine who was supposed to place an order.
-            //
-            // TODO: simplest to have modified aura where the order creator is also the block author?
-            // Keep in mind this wouldn't stall conesnsus...
-            // Simply if the order creator doesn't create a block, a next order will be created and the
-            // next collator will create a block.
-            //
-            // This of course ties consensus closely, however, for an initial version it should be good.
-            //
-            // NOTE: with this on-demand aura wouldn't make sense as it would be possible to stall
-            // the chain... So we only want the slot based solution..
-
-            // Since we filtered only the orders created by the author, we can simply take the first
-            // one. There's no reason for the author to create multiple orders anyway.
-            let order = result.first().unwrap(); // TODO
+            let order_placer = T::OrderPlacer::order_placer();
+            let Some(order) = result.into_iter().find(|(_, ordered_by)| *ordered_by == order_placer) else {
+                // TODO: is there anything to do?
+                return Ok(().into())
+            };
 
             Ok(().into())
         }
