@@ -44,43 +44,52 @@ sp_api::decl_runtime_apis! {
     }
 }
 
+const LOG_TARGET: &str = "order-inherent";
+
 #[derive(Encode, Decode, sp_core::RuntimeDebug, Clone, PartialEq, TypeInfo)]
-pub struct OrderInherentData<AuthorityPub: Send + Sync + Codec> {
+pub struct OrderInherentData {
     pub relay_storage_proof: sp_trie::StorageProof,
     pub para_id: ParaId,
-    pub author_pub: AuthorityPub,
 }
 
-impl<AuthorityPub: Send + Sync + Codec> OrderInherentData<AuthorityPub> {
+impl OrderInherentData {
     pub async fn create_at(
         relay_chain_interface: &impl RelayChainInterface,
         para_id: ParaId,
-        author_pub: AuthorityPub,
     ) -> Option<Self> {
-        let best_hash = relay_chain_interface.best_block_hash().await.unwrap(); // TODO
+        let best_hash = relay_chain_interface.best_block_hash().await.map_err(|e| {
+            log::error!(
+                target: LOG_TARGET,
+                "Failed to get best relay chain block hash. Error: {:?}",
+                e
+            );
+        }).ok()?;
+
         let header = relay_chain_interface
             .header(BlockId::Hash(best_hash))
             .await
-            .unwrap()
-            .unwrap(); // TODO
+            .map_err(|e| {
+                log::error!(
+                    target: LOG_TARGET,
+                    "Failed to fetch relay chain header: {}, Error: {:?}",
+                    best_hash,
+                    e
+                );
+            })
+            .ok()??;
 
         let relay_storage_proof =
             collect_relay_storage_proof(relay_chain_interface, header.hash()).await?;
 
-        // let relay_storage_proof = RelayChainStateProof::new(para_id, header.state_root, proof);
-
         Some(OrderInherentData {
             relay_storage_proof: relay_storage_proof.clone(),
             para_id,
-            author_pub,
         })
     }
 }
 
 #[async_trait::async_trait]
-impl<AuthorityPub: Send + Sync + Codec> sp_inherents::InherentDataProvider
-    for OrderInherentData<AuthorityPub>
-{
+impl sp_inherents::InherentDataProvider for OrderInherentData {
     async fn provide_inherent_data(
         &self,
         inherent_data: &mut sp_inherents::InherentData,

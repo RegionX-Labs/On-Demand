@@ -222,6 +222,8 @@ where
         .iter()
     {
         // Check if any of the accounts is below the baseline balance.
+
+        // TODO: get the account id from the session pallet.
         let rc_account_storage = relay_chain
             .get_storage_by_key(r_hash, &account(acc))
             .await?;

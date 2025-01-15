@@ -166,7 +166,7 @@ pub mod pallet {
             order_primitives::ON_DEMAND_INHERENT_IDENTIFIER;
 
         fn create_inherent(data: &InherentData) -> Option<Self::Call> {
-            let data: OrderInherentData<T::AccountId> = data
+            let data: OrderInherentData = data
                 .get_data(&Self::INHERENT_IDENTIFIER)
                 .ok()
                 .flatten()
@@ -203,7 +203,7 @@ pub mod pallet {
         #[pallet::weight((0, DispatchClass::Mandatory))]
         pub fn create_order(
             origin: OriginFor<T>,
-            data: OrderInherentData<T::AccountId>,
+            data: OrderInherentData,
         ) -> DispatchResultWithPostInfo {
             ensure_none(origin)?;
 
