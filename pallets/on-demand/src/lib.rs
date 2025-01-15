@@ -5,9 +5,7 @@
 extern crate alloc;
 
 use frame_support::pallet_prelude::*;
-use frame_support::traits::Currency;
 use frame_system::pallet_prelude::*;
-use polkadot_runtime_parachains::on_demand;
 use sp_runtime::SaturatedConversion;
 
 pub use pallet::*;
@@ -24,22 +22,20 @@ pub mod weights;
 #[cfg(feature = "runtime-benchmarks")]
 pub use benchmarking::BenchmarkHelper;
 
-type BalanceOf<T> = <<T as on_demand::Config>::Currency as Currency<
-    <T as frame_system::Config>::AccountId,
->>::Balance;
-
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
+    use codec::Codec;
     use codec::MaxEncodedLen;
     use codec::{Decode, Encode};
     use cumulus_pallet_parachain_system::{
         relay_state_snapshot::Error as RelayError, RelayChainStateProof, RelaychainStateProvider,
     };
-    use frame_support::DefaultNoBound;
+    use frame_support::{traits::tokens::Balance, DefaultNoBound};
     use frame_system::EventRecord;
     use order_primitives::{well_known_keys::EVENTS, OrderInherentData};
+    use polkadot_primitives::Id as ParaId;
     use scale_info::TypeInfo;
     use sp_runtime::traits::{AtLeast32BitUnsigned, Convert};
     use sp_runtime::RuntimeAppPublic;
@@ -49,6 +45,9 @@ pub mod pallet {
     pub trait Config: frame_system::Config + pallet_aura::Config + pallet_session::Config {
         /// The overarching event type.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
+        /// Relay chain balance type.
+        type RelayChainBalance: Balance;
 
         /// The admin origin for managing the on-demand configuration.
         type AdminOrigin: EnsureOrigin<Self::RuntimeOrigin>;
@@ -79,11 +78,6 @@ pub mod pallet {
 
         /// Type for getting the current relay chain state.
         type RelayChainStateProvider: RelaychainStateProvider;
-
-        /// Relay chain on demand config.
-        type OnDemandConfig: polkadot_runtime_parachains::on_demand::Config<AccountId = Self::AccountId>
-            + Parameter
-            + Member;
 
         #[cfg(feature = "runtime-benchmarks")]
         type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
@@ -133,6 +127,8 @@ pub mod pallet {
         InvalidProof,
         /// Failed to read the relay chain proof.
         FailedProofReading,
+        /// Failed to get the order placer account based on the authority id.
+        FailedToGetOrderPlacerAccount,
     }
 
     #[pallet::genesis_config]
@@ -185,9 +181,20 @@ pub mod pallet {
     }
 
     #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-    #[scale_info(skip_type_params(T))]
-    enum RelayChainEvent<T: polkadot_runtime_parachains::on_demand::Config> {
-        OnDemandAssignmentProvider(on_demand::Event<T>),
+    enum RelayChainEvent<AccountId: Codec, Balance: Codec> {
+        OnDemandAssignmentProvider(OnDemandEvent<AccountId, Balance>),
+    }
+
+    #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+    enum OnDemandEvent<AccountId: Codec, Balance: Codec> {
+        OnDemandOrderPlaced {
+            para_id: ParaId,
+            spot_price: Balance,
+            ordered_by: AccountId,
+        },
+        SpotPriceSet {
+            spot_price: Balance,
+        },
     }
 
     #[pallet::call]
@@ -206,28 +213,34 @@ pub mod pallet {
                 current_state.state_root,
                 data.relay_storage_proof,
             )
-            .expect("Invalid relay chain state proof"); // TODO
+            .expect("Invalid relay chain state proof");
 
-            let events = relay_state_proof
-                .read_entry::<Vec<Box<EventRecord<RelayChainEvent<T::OnDemandConfig>, T::Hash>>>>(
-                    EVENTS, None,
-                )
-                .map_err(|e| match e {
-                    RelayError::ReadEntry(_) => Error::InvalidProof,
-                    _ => Error::<T>::FailedProofReading,
-                })
-                .unwrap(); // TODO
+            let events =
+                relay_state_proof
+                    .read_entry::<Vec<
+                        Box<
+                            EventRecord<
+                                RelayChainEvent<T::AccountId, T::RelayChainBalance>,
+                                T::Hash,
+                            >,
+                        >,
+                    >>(EVENTS, None)
+                    .map_err(|e| match e {
+                        RelayError::ReadEntry(_) => Error::InvalidProof,
+                        _ => Error::<T>::FailedProofReading,
+                    })?;
 
-            let result: Vec<(BalanceOf<T::OnDemandConfig>, T::AccountId)> = events
+            let result: Vec<(T::RelayChainBalance, T::AccountId)> = events
                 .into_iter()
                 .filter_map(|item| match item.event {
-                    RelayChainEvent::<T::OnDemandConfig>::OnDemandAssignmentProvider(
-                        on_demand::Event::OnDemandOrderPlaced {
-                            para_id,
-                            spot_price,
-                            ordered_by,
-                        },
-                    ) if para_id == data.para_id => Some((spot_price, ordered_by)),
+                    RelayChainEvent::OnDemandAssignmentProvider(OnDemandEvent::<
+                        T::AccountId,
+                        T::RelayChainBalance,
+                    >::OnDemandOrderPlaced {
+                        para_id,
+                        spot_price,
+                        ordered_by,
+                    }) if para_id == data.para_id => Some((spot_price, ordered_by)),
                     _ => None,
                 })
                 .collect();
@@ -239,7 +252,7 @@ pub mod pallet {
                 sp_application_crypto::key_types::AURA,
                 order_placer.to_raw_vec(),
             ))
-            .unwrap(); // TODO
+            .ok_or(Error::<T>::FailedToGetOrderPlacerAccount)?;
 
             let Some(order) = result.into_iter().find(|(_, ordered_by)| {
                 // In most implementations the validator id is same as account id.
@@ -249,6 +262,8 @@ pub mod pallet {
                 // TODO: is there anything to do?
                 return Ok(().into());
             };
+
+            // TODO: reward the order placer.
 
             Ok(().into())
         }
