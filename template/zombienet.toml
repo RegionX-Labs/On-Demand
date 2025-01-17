@@ -26,15 +26,15 @@ id = 2000
 [[parachains.collators]]
 name = "charlie"
 ws_port = 9988
-command = "parachain-example-node"
+command = "parachain-template-node"
 
 [[parachains.collators]]
 name = "eve"
 ws_port = 9977
-command = "parachain-example-node"
+command = "parachain-template-node"
 
 [[parachains.collators]]
 name = "ferdie"
 ws_port = 9966
-command = "parachain-example-node"
+command = "parachain-template-node"
 
