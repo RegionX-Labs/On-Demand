@@ -7715,6 +7715,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "order-primitives"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "cumulus-primitives-core",
+ "cumulus-relay-chain-interface",
+ "frame-support",
+ "hex-literal",
+ "log",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-api",
+ "sp-core",
+ "sp-inherents",
+ "sp-io",
+ "sp-runtime",
+ "sp-state-machine",
+ "sp-trie",
+]
+
+[[package]]
 name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8818,6 +8839,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-on-demand"
+version = "0.1.0"
+dependencies = [
+ "cumulus-pallet-parachain-system",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "order-primitives",
+ "pallet-aura",
+ "pallet-session",
+ "parity-scale-codec",
+ "polkadot-primitives",
+ "polkadot-runtime-parachains",
+ "scale-info",
+ "sp-application-crypto",
+ "sp-runtime",
+]
+
+[[package]]
 name = "pallet-paged-list"
 version = "0.17.0"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2412#60832af6a35fbebda39ac38735c89848eda82cb9"
@@ -9662,6 +9702,8 @@ dependencies = [
  "docify",
  "hex-literal",
  "log",
+ "order-primitives",
+ "pallet-on-demand",
  "pallet-parachain-template",
  "parity-scale-codec",
  "polkadot-sdk",
