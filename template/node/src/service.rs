@@ -3,14 +3,16 @@
 // std
 use std::{sync::Arc, time::Duration};
 
-use cumulus_client_cli::CollatorOptions;
 // Local Runtime Types
-use parachain_example_runtime::{
+use parachain_template_runtime::{
 	apis::RuntimeApi,
 	opaque::{Block, Hash},
 };
 
+use polkadot_sdk::*;
+
 // Cumulus Imports
+use cumulus_client_cli::CollatorOptions;
 use cumulus_client_collator::service::CollatorService;
 #[docify::export(lookahead_collator)]
 use cumulus_client_consensus_aura::collators::lookahead::{self as aura, Params as AuraParams};
@@ -26,29 +28,19 @@ use cumulus_primitives_core::{
 	relay_chain::{CollatorPair, ValidationCode},
 	ParaId,
 };
-use cumulus_relay_chain_interface::{BlockNumber, OverseerHandle, RelayChainInterface};
+use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 
 // Substrate Imports
-use codec::Encode;
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
-use on_demand_primitives::OnDemandRuntimeApi;
-use on_demand_service::config::{OnDemandSlot, OrderInherentData};
-use pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi;
-use polkadot_primitives::Balance;
 use prometheus_endpoint::Registry;
-use sc_client_api::{Backend, UsageProvider};
+use sc_client_api::Backend;
 use sc_consensus::ImportQueue;
 use sc_executor::{HeapAllocStrategy, WasmExecutor, DEFAULT_HEAP_ALLOC_STRATEGY};
 use sc_network::NetworkBlock;
 use sc_service::{Configuration, PartialComponents, TFullBackend, TFullClient, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
-use sc_transaction_pool_api::{OffchainTransactionPoolFactory, TransactionPool};
-use sp_api::ProvideRuntimeApi;
-use sp_consensus_aura::sr25519::AuthorityPair;
+use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::KeystorePtr;
-
-// RegionX Modules
-use on_demand_service::{config::OrderCriteria, start_on_demand};
 
 #[docify::export(wasm_executor)]
 type ParachainExecutor = WasmExecutor<ParachainHostFunctions>;
@@ -65,66 +57,9 @@ pub type Service = PartialComponents<
 	ParachainBackend,
 	(),
 	sc_consensus::DefaultImportQueue<Block>,
-	sc_transaction_pool::FullPool<Block, ParachainClient>,
+	sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient>,
 	(ParachainBlockImport, Option<Telemetry>, Option<TelemetryWorkerHandle>),
 >;
-
-type OnDemandConfig = OnDemandSlot<
-	Arc<dyn RelayChainInterface>,
-	ParachainClient,
-	Block,
-	AuthorityPair,
-	sc_transaction_pool::FullPool<Block, ParachainClient>,
-	Balance,
-	OrderPlacementCriteria,
-	Balance,
->;
-
-// https://github.com/paritytech/cumulus/issues/2154
-pub struct OrderPlacementCriteria;
-impl OrderCriteria for OrderPlacementCriteria {
-	type Block = Block;
-	type P = ParachainClient;
-	type ExPool = sc_transaction_pool::FullPool<Block, ParachainClient>;
-
-	// Checks if the fee threshold has been reached.
-	fn should_place_order(
-		parachain: &Self::P,
-		transaction_pool: Arc<Self::ExPool>,
-		_height: BlockNumber,
-	) -> bool {
-		let pending_iterator = transaction_pool.ready();
-		let block_hash = parachain.usage_info().chain.best_hash;
-		let mut total_fees = Balance::from(0u32);
-
-		for pending_tx in pending_iterator {
-			let pending_tx_data = pending_tx.data.clone();
-			let utx_length = pending_tx_data.encode().len() as u32;
-
-			let fee_details =
-				parachain
-					.runtime_api()
-					.query_fee_details(block_hash, pending_tx_data, utx_length);
-
-			if let Ok(details) = fee_details {
-				total_fees = total_fees.saturating_add(details.final_fee());
-			}
-		}
-
-		let Some(fee_threshold) = parachain.runtime_api().threshold_parameter(block_hash).ok()
-		else {
-			return false;
-		};
-
-		if fee_threshold > 0 {
-			log::info!(
-				"{}% of the threshold requirement met",
-				total_fees.saturating_div(fee_threshold).saturating_mul(100)
-			);
-		}
-		total_fees >= fee_threshold
-	}
-}
 
 /// Starts a `ServiceBuilder` for a full service.
 ///
@@ -172,12 +107,15 @@ pub fn new_partial(config: &Configuration) -> Result<Service, sc_service::Error>
 		telemetry
 	});
 
-	let transaction_pool = sc_transaction_pool::BasicPool::new_full(
-		config.transaction_pool.clone(),
-		config.role.is_authority().into(),
-		config.prometheus_registry(),
-		task_manager.spawn_essential_handle(),
-		client.clone(),
+	let transaction_pool = Arc::from(
+		sc_transaction_pool::Builder::new(
+			task_manager.spawn_essential_handle(),
+			client.clone(),
+			config.role.is_authority().into(),
+		)
+		.with_options(config.transaction_pool.clone())
+		.with_prometheus(config.prometheus_registry())
+		.build(),
 	);
 
 	let block_import = ParachainBlockImport::new(client.clone(), backend.clone());
@@ -211,7 +149,7 @@ fn build_import_queue(
 	task_manager: &TaskManager,
 ) -> sc_consensus::DefaultImportQueue<Block> {
 	cumulus_client_consensus_aura::equivocation_import_queue::fully_verifying_import_queue::<
-		AuthorityPair,
+		sp_consensus_aura::sr25519::AuthorityPair,
 		_,
 		_,
 		_,
@@ -238,7 +176,7 @@ fn start_consensus(
 	telemetry: Option<TelemetryHandle>,
 	task_manager: &TaskManager,
 	relay_chain_interface: Arc<dyn RelayChainInterface>,
-	transaction_pool: Arc<sc_transaction_pool::FullPool<Block, ParachainClient>>,
+	transaction_pool: Arc<sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient>>,
 	keystore: KeystorePtr,
 	relay_chain_slot_duration: Duration,
 	para_id: ParaId,
@@ -264,22 +202,7 @@ fn start_consensus(
 	);
 
 	let params = AuraParams {
-		create_inherent_data_providers: move |_para_parent, ()| async move {
-			let relay_chain_interface = relay_chain_interface.clone();
-			async move {
-				let order_inherent = OrderInherentData::create_at(
-					&relay_chain_interface,
-					para_id,
-				)
-				.await;
-				let order_inherent = order_inherent.ok_or_else(|| {
-					Box::<dyn std::error::Error + Send + Sync>::from(
-						"Failed to create order inherent",
-					)
-				})?;
-				Ok(order_inherent)
-			}
-		},
+		create_inherent_data_providers: move |_, ()| async move { Ok(()) },
 		block_import,
 		para_client: client.clone(),
 		para_backend: backend,
@@ -297,7 +220,9 @@ fn start_consensus(
 		authoring_duration: Duration::from_millis(2000),
 		reinitialize: false,
 	};
-	let fut = aura::run::<Block, AuthorityPair, _, _, _, _, _, _, _, _>(params);
+	let fut = aura::run::<Block, sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _, _, _>(
+		params,
+	);
 	task_manager.spawn_essential_handle().spawn("aura", None, fut);
 
 	Ok(())
@@ -311,7 +236,6 @@ pub async fn start_parachain_node(
 	collator_options: CollatorOptions,
 	para_id: ParaId,
 	hwbench: Option<sc_sysinfo::HwBench>,
-	on_demand_baseline_balance: Balance,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
 	let parachain_config = prepare_node_config(parachain_config);
 
@@ -328,9 +252,6 @@ pub async fn start_parachain_node(
 	let client = params.client.clone();
 	let backend = params.backend.clone();
 	let mut task_manager = params.task_manager;
-
-	let relay_rpc =
-		polkadot_config.rpc.addr.as_ref().and_then(|r| r.first()).map(|f| f.listen_addr);
 
 	let (relay_chain_interface, collator_key) = build_relay_chain_interface(
 		polkadot_config,
@@ -366,9 +287,7 @@ pub async fn start_parachain_node(
 	if parachain_config.offchain_worker.enabled {
 		use futures::FutureExt;
 
-		task_manager.spawn_handle().spawn(
-			"offchain-workers-runner",
-			"offchain-work",
+		let offchain_workers =
 			sc_offchain::OffchainWorkers::new(sc_offchain::OffchainWorkerOptions {
 				runtime_api_provider: client.clone(),
 				keystore: Some(params.keystore_container.keystore()),
@@ -380,9 +299,11 @@ pub async fn start_parachain_node(
 				is_validator: parachain_config.role.is_authority(),
 				enable_http_requests: false,
 				custom_extensions: move |_| vec![],
-			})
-			.run(client.clone(), task_manager.spawn_handle())
-			.boxed(),
+			})?;
+		task_manager.spawn_handle().spawn(
+			"offchain-workers-runner",
+			"offchain-work",
+			offchain_workers.run(client.clone(), task_manager.spawn_handle()).boxed(),
 		);
 	}
 
@@ -467,17 +388,6 @@ pub async fn start_parachain_node(
 	})?;
 
 	if validator {
-		start_on_demand::<OnDemandConfig>(
-			client.clone(),
-			para_id,
-			relay_chain_interface.clone(),
-			transaction_pool.clone(),
-			&task_manager,
-			params.keystore_container.keystore(),
-			relay_rpc,
-			on_demand_baseline_balance,
-			relay_chain_slot_duration,
-		)?;
 		start_consensus(
 			client.clone(),
 			backend,

@@ -31,7 +31,6 @@
 #![allow(missing_docs)]
 
 use frame_support::{traits::Get, weights::{Weight, constants::RocksDbWeight}};
-use crate::frame_system;
 use core::marker::PhantomData;
 
 /// Weight functions needed for `pallet_on_demand`.

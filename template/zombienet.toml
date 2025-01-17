@@ -1,0 +1,40 @@
+[relaychain]
+default_command = "polkadot"
+chain = "rococo-local"
+
+[[relaychain.nodes]]
+name = "alice"
+validator = true
+ws_port = 9944
+
+[[relaychain.nodes]]
+name = "bob"
+validator = true
+ws_port = 9955
+
+[[parachains]]
+id = 1000
+
+[parachains.collator]
+name = "dave"
+ws_port = 8844
+command = "polkadot-parachain"
+
+[[parachains]]
+id = 2000
+
+[[parachains.collators]]
+name = "charlie"
+ws_port = 9988
+command = "parachain-template-node"
+
+[[parachains.collators]]
+name = "eve"
+ws_port = 9977
+command = "parachain-template-node"
+
+[[parachains.collators]]
+name = "ferdie"
+ws_port = 9966
+command = "parachain-template-node"
+
