@@ -1,8 +1,8 @@
+use crate::{OrderInherentData, EVENTS, ON_DEMAND_INHERENT_IDENTIFIER};
 use cumulus_primitives_core::relay_chain::BlockId;
 use cumulus_primitives_core::ParaId;
-use cumulus_relay_chain_interface::RelayChainInterface;
 use cumulus_relay_chain_interface::PHash;
-use crate::{OrderInherentData, EVENTS, ON_DEMAND_INHERENT_IDENTIFIER};
+use cumulus_relay_chain_interface::RelayChainInterface;
 
 const LOG_TARGET: &str = "order-inherent";
 

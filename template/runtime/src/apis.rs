@@ -45,9 +45,9 @@ use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-    AccountId, Balance, Block, ConsensusHook, Executive, InherentDataExt, Nonce, ParachainSystem,
-    Runtime, RuntimeCall, RuntimeGenesisConfig, SessionKeys, System, TransactionPayment,
-    SLOT_DURATION, VERSION, BlockNumber, ThresholdParameter,
+    AccountId, Balance, Block, BlockNumber, ConsensusHook, Executive, InherentDataExt, Nonce,
+    ParachainSystem, Runtime, RuntimeCall, RuntimeGenesisConfig, SessionKeys, System,
+    ThresholdParameter, TransactionPayment, SLOT_DURATION, VERSION,
 };
 
 // we move some impls outside so we can easily use them with `docify`.
@@ -309,10 +309,10 @@ impl_runtime_apis! {
     impl order_primitives::OnDemandRuntimeApi<Block, Balance, BlockNumber, ThresholdParameter> for Runtime {
         fn slot_width() -> u32 {
             // OnDemand::slot_width()
-			0
+            0
         }
         fn threshold_parameter() -> ThresholdParameter {
-			0
+            0
             // OnDemand::threshold_parameter()
         }
     }

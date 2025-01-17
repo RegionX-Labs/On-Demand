@@ -28,10 +28,20 @@ use cumulus_primitives_core::{
     relay_chain::{CollatorPair, ValidationCode},
     ParaId,
 };
-use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
+use cumulus_relay_chain_interface::{BlockNumber, OverseerHandle, RelayChainInterface};
 
 // Substrate Imports
+use codec::Encode;
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
+use order_primitives::OnDemandRuntimeApi;
+use order_service::config::OnDemandAura;
+use order_service::config::OrderCriteria;
+use order_service::start_on_demand;
+use polkadot_primitives::Balance;
+use polkadot_sdk::pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi;
+use polkadot_sdk::polkadot_cli::ProvideRuntimeApi;
+use polkadot_sdk::sc_client_api::UsageProvider;
+use polkadot_sdk::sc_service::TransactionPool;
 use prometheus_endpoint::Registry;
 use sc_client_api::Backend;
 use sc_consensus::ImportQueue;
@@ -40,6 +50,7 @@ use sc_network::NetworkBlock;
 use sc_service::{Configuration, PartialComponents, TFullBackend, TFullClient, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
+use sp_consensus_aura::sr25519::AuthorityPair;
 use sp_keystore::KeystorePtr;
 
 #[docify::export(wasm_executor)]
@@ -64,6 +75,64 @@ pub type Service = PartialComponents<
         Option<TelemetryWorkerHandle>,
     ),
 >;
+
+type OnDemandConfig = OnDemandAura<
+    Arc<dyn RelayChainInterface>,
+    ParachainClient,
+    Block,
+    AuthorityPair,
+    sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient>,
+    Balance,
+    OrderPlacementCriteria,
+    Balance,
+>;
+
+// https://github.com/paritytech/cumulus/issues/2154
+pub struct OrderPlacementCriteria;
+impl OrderCriteria for OrderPlacementCriteria {
+    type Block = Block;
+    type P = ParachainClient;
+    type ExPool = sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient>;
+
+    // Checks if the fee threshold has been reached.
+    fn should_place_order(
+        parachain: &Self::P,
+        transaction_pool: Arc<Self::ExPool>,
+        _height: BlockNumber,
+    ) -> bool {
+        let pending_iterator = transaction_pool.ready();
+        let block_hash = parachain.usage_info().chain.best_hash;
+        let mut total_fees = Balance::from(0u32);
+
+        for pending_tx in pending_iterator {
+            let pending_tx_data = pending_tx.data.clone();
+            let utx_length = pending_tx_data.encode().len() as u32;
+
+            let fee_details = parachain.runtime_api().query_fee_details(
+                block_hash,
+                (*pending_tx_data).clone(),
+                utx_length,
+            );
+
+            if let Ok(details) = fee_details {
+                total_fees = total_fees.saturating_add(details.final_fee());
+            }
+        }
+
+        let Some(fee_threshold) = parachain.runtime_api().threshold_parameter(block_hash).ok()
+        else {
+            return false;
+        };
+
+        if fee_threshold > 0 {
+            log::info!(
+                "{}% of the threshold requirement met",
+                total_fees.saturating_div(fee_threshold).saturating_mul(100)
+            );
+        }
+        total_fees >= fee_threshold
+    }
+}
 
 /// Starts a `ServiceBuilder` for a full service.
 ///
@@ -249,6 +318,7 @@ pub async fn start_parachain_node(
     collator_options: CollatorOptions,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
+    on_demand_baseline_balance: Balance,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
     let parachain_config = prepare_node_config(parachain_config);
 
@@ -265,6 +335,13 @@ pub async fn start_parachain_node(
     let client = params.client.clone();
     let backend = params.backend.clone();
     let mut task_manager = params.task_manager;
+
+    let relay_rpc = polkadot_config
+        .rpc
+        .addr
+        .as_ref()
+        .and_then(|r| r.first())
+        .map(|f| f.listen_addr);
 
     let (relay_chain_interface, collator_key) = build_relay_chain_interface(
         polkadot_config,
@@ -405,6 +482,17 @@ pub async fn start_parachain_node(
     })?;
 
     if validator {
+        start_on_demand::<OnDemandConfig>(
+            client.clone(),
+            para_id,
+            relay_chain_interface.clone(),
+            transaction_pool.clone(),
+            &task_manager,
+            params.keystore_container.keystore(),
+            relay_rpc,
+            on_demand_baseline_balance,
+            relay_chain_slot_duration,
+        )?;
         start_consensus(
             client.clone(),
             backend,

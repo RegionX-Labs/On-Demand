@@ -26,6 +26,7 @@ pub use benchmarking::BenchmarkHelper;
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
+    use alloc::{boxed::Box, vec::Vec};
     use codec::Codec;
     use codec::MaxEncodedLen;
     use codec::{Decode, Encode};
@@ -39,7 +40,6 @@ pub mod pallet {
     use scale_info::TypeInfo;
     use sp_runtime::traits::{AtLeast32BitUnsigned, Convert};
     use sp_runtime::RuntimeAppPublic;
-    use alloc::{vec::Vec, boxed::Box};
 
     /// The module configuration trait.
     #[pallet::config]

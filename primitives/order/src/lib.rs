@@ -1,11 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use crate::well_known_keys::EVENTS;
-use codec::{Decode, Encode, MaxEncodedLen, Codec};
+use codec::{Codec, Decode, Encode, MaxEncodedLen};
 use cumulus_primitives_core::ParaId;
 use frame_support::{pallet_prelude::InherentIdentifier, Parameter};
-use sp_runtime::traits::{MaybeDisplay, MaybeSerializeDeserialize, Member};
 use scale_info::TypeInfo;
+use sp_runtime::traits::{MaybeDisplay, MaybeSerializeDeserialize, Member};
 
 #[cfg(feature = "std")]
 pub mod inherent;
