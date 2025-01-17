@@ -39,6 +39,7 @@ pub mod pallet {
     use scale_info::TypeInfo;
     use sp_runtime::traits::{AtLeast32BitUnsigned, Convert};
     use sp_runtime::RuntimeAppPublic;
+    use alloc::{vec::Vec, boxed::Box};
 
     /// The module configuration trait.
     #[pallet::config]

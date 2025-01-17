@@ -44,12 +44,12 @@ sc-service = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = 
 sc-utils = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 
 sp-api = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
-sp-application-crypto = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412" }
+sp-application-crypto = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false}
 sp-block-builder = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 sp-blockchain = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 sp-consensus = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 sp-consensus-slots = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
-sp-consensus-aura = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412" }
+sp-consensus-aura = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 sp-timestamp = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 sp-core = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 sp-io = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
@@ -69,7 +69,7 @@ substrate-prometheus-endpoint = { git = "https://github.com/paritytech/polkadot-
 
 # Cumulus
 cumulus-primitives-core = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
-cumulus-relay-chain-interface = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412" }
+cumulus-relay-chain-interface = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 cumulus-client-consensus-aura = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 cumulus-client-consensus-common = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 cumulus-pallet-parachain-system = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
@@ -80,15 +80,14 @@ cumulus-primitives-aura = { git = "https://github.com/paritytech/polkadot-sdk.gi
 
 # Polkadot
 polkadot-primitives = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
-polkadot-runtime-parachains = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412" }
-polkadot-node-primitives = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412" }
-polkadot-node-subsystem = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412" }
-polkadot-node-subsystem-util = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412" }
-polkadot-overseer = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412" }
+polkadot-runtime-parachains = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
+polkadot-node-primitives = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
+polkadot-node-subsystem = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
+polkadot-node-subsystem-util = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
+polkadot-overseer = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 
 # Local
-pallet-on-demand = { path = "./pallets/on-demand" }
-order-primitives = { path = "./primitives/order" }
-order-service = { path = "./services/order" }
-on-demand-aura = { path = "./client/consensus/on-demand-aura" }
-temp-test = { path = "./temp-test" }
+pallet-on-demand = { path = "./pallets/on-demand", default-features = false }
+order-primitives = { path = "./primitives/order", default-features = false }
+order-service = { path = "./services/order", default-features = false }
+on-demand-aura = { path = "./client/consensus/on-demand-aura", default-features = false }

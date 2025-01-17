@@ -87,14 +87,14 @@ runtime-benchmarks = [
 	"cumulus-pallet-parachain-system/runtime-benchmarks",
 	"hex-literal",
 	"pallet-parachain-template/runtime-benchmarks",
-	# "pallet-on-demand/runtime-benchmarks",
+	"pallet-on-demand/runtime-benchmarks",
 	"polkadot-sdk/runtime-benchmarks",
 ]
 
 try-runtime = [
 	"cumulus-pallet-parachain-system/try-runtime",
 	"pallet-parachain-template/try-runtime",
-	# "pallet-on-demand/try-runtime",
+	"pallet-on-demand/try-runtime",
 	"polkadot-sdk/try-runtime",
 ]
 
