@@ -5932,8 +5932,6 @@ dependencies = [
  "polkadot-primitives",
  "polkadot-runtime-parachains",
  "scale-info",
- "serde",
- "smallvec",
  "sp-application-crypto",
  "sp-consensus-aura",
  "sp-core",
