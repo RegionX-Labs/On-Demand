@@ -278,8 +278,26 @@ fn start_consensus(
         client.clone(),
     );
 
+    let relay_chain_interface_clone = relay_chain_interface.clone();
     let params = AuraParams {
-        create_inherent_data_providers: move |_, ()| async move { Ok(()) },
+        create_inherent_data_providers: move |_, ()| { 
+            let relay_chain_interface = relay_chain_interface_clone.clone();
+            async move {
+                let order_inherent = order_primitives::OrderInherentData::create_at(
+                    &relay_chain_interface,
+                    para_id,
+                )
+                .await;
+
+                let order_inherent = order_inherent.ok_or_else(|| {
+					Box::<dyn std::error::Error + Send + Sync>::from(
+						"Failed to create order inherent",
+					)
+				})?;
+
+                Ok(order_inherent) 
+            }
+        },
         block_import,
         para_client: client.clone(),
         para_backend: backend,

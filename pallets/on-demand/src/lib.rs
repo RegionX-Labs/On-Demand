@@ -119,6 +119,8 @@ pub mod pallet {
         SlotWidthSet { width: u32 },
         /// Threshold parameter set.
         ThresholdParameterSet { parameter: T::ThresholdParameter },
+        /// We rewarded the order placer.
+        OrderPlacerRewarded { order_placer: T::AccountId },
     }
 
     #[pallet::error]
@@ -265,6 +267,7 @@ pub mod pallet {
             };
 
             // TODO: reward the order placer.
+            Self::deposit_event(Event::OrderPlacerRewarded { order_placer: order.1 });
 
             Ok(().into())
         }
