@@ -1,0 +1,18 @@
+{
+  "name": "e2e",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx ts-node ./order-placement.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@polkadot/api": "^15.0.1",
+    "@polkadot/keyring": "^13.2.3",
+    "@polkadot/types": "^15.0.2",
+    "@polkadot/util": "^13.2.3"
+  }
+}

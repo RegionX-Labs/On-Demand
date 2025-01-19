@@ -29,6 +29,13 @@ parachain-template-runtime = { workspace = true }
 sc-tracing = { workspace = true, default-features = true }
 prometheus-endpoint = { workspace = true, default-features = true }
 
+# Polkadot
+polkadot-primitives = { workspace = true, default-features = true }
+
+# Local Modules
+order-service = { workspace = true }
+order-primitives = { workspace = true }
+
 [build-dependencies]
 polkadot-sdk = { workspace = true, features = ["substrate-build-script-utils"] }
 
@@ -38,6 +45,7 @@ std = [
 	"log/std",
 	"parachain-template-runtime/std",
 	"polkadot-sdk/std",
+	"polkadot-primitives/std",
 ]
 runtime-benchmarks = [
 	"parachain-template-runtime/runtime-benchmarks",

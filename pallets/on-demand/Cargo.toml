@@ -10,20 +10,22 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { workspace = true, default-features = false, features = ["derive"] }
+log = { workspace = true, default-features = false }
 scale-info = { workspace = true, default-features = false, features = ["derive"] }
 
 # Substrate
 frame-system = { workspace = true, default-features = false }
+frame-support = { workspace = true, default-features = false }
 frame-benchmarking = { workspace = true, default-features = false, optional = true }
 sp-application-crypto = { workspace = true, default-features = false }
 sp-runtime = { workspace = true, default-features = false }
-frame-support = { workspace = true, default-features = false }
 pallet-aura = { workspace = true, default-features = false }
 pallet-session = { workspace = true, default-features = false }
 
 # Polkadot
 polkadot-runtime-parachains = { workspace = true, default-features = false }
-polkadot-primitives = { workspace = true }
+polkadot-primitives = { workspace = true, default-features = false }
+rococo-runtime = { workspace = true, default-features = false }
 
 # Cumulus
 cumulus-pallet-parachain-system = { workspace = true, default-features = false }
@@ -38,9 +40,7 @@ sp-consensus-aura = { workspace = true, default-features = false }
 pallet-balances = { workspace = true, default-features = false }
 pallet-collator-selection = { workspace = true, default-features = false }
 pallet-timestamp = { workspace = true, default-features = false }
-serde = { workspace = true }
-smallvec = { workspace = true }
-		
+
 [features]
 default = ["std"]
 runtime-benchmarks = [
@@ -69,6 +69,7 @@ std = [
 	"cumulus-pallet-parachain-system/std",
 	"polkadot-runtime-parachains/std",
 	"polkadot-primitives/std",
+	"rococo-runtime/std",
 ]
 try-runtime = [
 	"frame-support/try-runtime",

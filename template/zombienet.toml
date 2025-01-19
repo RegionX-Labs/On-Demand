@@ -37,4 +37,3 @@ command = "parachain-template-node"
 name = "ferdie"
 ws_port = 9966
 command = "parachain-template-node"
-
