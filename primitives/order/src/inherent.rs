@@ -39,6 +39,11 @@ impl OrderInherentData {
         let relay_storage_proof =
             collect_relay_storage_proof(relay_chain_interface, header.hash()).await?;
 
+        log::info!(
+            target: LOG_TARGET,
+            "Submitting inherent data"
+        );
+
         Some(OrderInherentData {
             relay_storage_proof: relay_storage_proof.clone(),
             para_id,

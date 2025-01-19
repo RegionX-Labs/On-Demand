@@ -22,6 +22,8 @@ pub mod weights;
 #[cfg(feature = "runtime-benchmarks")]
 pub use benchmarking::BenchmarkHelper;
 
+const LOG_TARGET: &str = "order-inherent";
+
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
@@ -37,13 +39,17 @@ pub mod pallet {
     use frame_system::EventRecord;
     use order_primitives::{well_known_keys::EVENTS, OrderInherentData};
     use polkadot_primitives::Id as ParaId;
+    use polkadot_runtime_parachains::on_demand;
     use scale_info::TypeInfo;
     use sp_runtime::traits::{AtLeast32BitUnsigned, Convert};
+    use sp_runtime::AccountId32;
     use sp_runtime::RuntimeAppPublic;
 
     /// The module configuration trait.
     #[pallet::config]
-    pub trait Config: frame_system::Config + pallet_aura::Config + pallet_session::Config {
+    pub trait Config:
+        frame_system::Config<AccountId = AccountId32> + pallet_aura::Config + pallet_session::Config
+    {
         /// The overarching event type.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -132,6 +138,8 @@ pub mod pallet {
         FailedProofReading,
         /// Failed to get the order placer account based on the authority id.
         FailedToGetOrderPlacerAccount,
+        /// We failed to decode inherent data.
+        FailedToDecodeInherentData,
     }
 
     #[pallet::genesis_config]
@@ -163,12 +171,17 @@ pub mod pallet {
     #[pallet::inherent]
     impl<T: Config> ProvideInherent for Pallet<T> {
         type Call = Call<T>;
-        type Error = MakeFatalError<()>;
+        type Error = MakeFatalError<Error<T>>;
 
         const INHERENT_IDENTIFIER: InherentIdentifier =
             order_primitives::ON_DEMAND_INHERENT_IDENTIFIER;
 
         fn create_inherent(data: &InherentData) -> Option<Self::Call> {
+            log::info!(
+                target: LOG_TARGET,
+                "Create inherent"
+            );
+
             let data: OrderInherentData = data
                 .get_data(&Self::INHERENT_IDENTIFIER)
                 .ok()
@@ -185,6 +198,7 @@ pub mod pallet {
 
     #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, TypeInfo, MaxEncodedLen)]
     enum RelayChainEvent<AccountId: Codec, Balance: Codec> {
+        // TODO: specify codec index.
         OnDemandAssignmentProvider(OnDemandEvent<AccountId, Balance>),
     }
 
@@ -218,32 +232,25 @@ pub mod pallet {
             )
             .expect("Invalid relay chain state proof");
 
-            let events =
-                relay_state_proof
-                    .read_entry::<Vec<
-                        Box<
-                            EventRecord<
-                                RelayChainEvent<T::AccountId, T::RelayChainBalance>,
-                                T::Hash,
-                            >,
-                        >,
-                    >>(EVENTS, None)
-                    .map_err(|e| match e {
-                        RelayError::ReadEntry(_) => Error::InvalidProof,
-                        _ => Error::<T>::FailedProofReading,
-                    })?;
+            let events = relay_state_proof
+                .read_entry::<Vec<Box<EventRecord<rococo_runtime::RuntimeEvent, T::Hash>>>>(
+                    EVENTS, None,
+                )
+                .map_err(|e| match e {
+                    RelayError::ReadEntry(_) => Error::InvalidProof,
+                    _ => Error::<T>::FailedProofReading,
+                })?;
 
-            let result: Vec<(T::RelayChainBalance, T::AccountId)> = events
+            let result: Vec<(u128, AccountId32)> = events
                 .into_iter()
                 .filter_map(|item| match item.event {
-                    RelayChainEvent::OnDemandAssignmentProvider(OnDemandEvent::<
-                        T::AccountId,
-                        T::RelayChainBalance,
-                    >::OnDemandOrderPlaced {
-                        para_id,
-                        spot_price,
-                        ordered_by,
-                    }) if para_id == data.para_id => Some((spot_price, ordered_by)),
+                    rococo_runtime::RuntimeEvent::OnDemandAssignmentProvider(
+                        on_demand::Event::OnDemandOrderPlaced {
+                            para_id,
+                            spot_price,
+                            ordered_by,
+                        },
+                    ) if para_id == data.para_id => Some((spot_price, ordered_by)),
                     _ => None,
                 })
                 .collect();
@@ -257,17 +264,20 @@ pub mod pallet {
             ))
             .ok_or(Error::<T>::FailedToGetOrderPlacerAccount)?;
 
-            let Some(order) = result.into_iter().find(|(_, ordered_by)| {
-                // In most implementations the validator id is same as account id.
-                <T as pallet_session::Config>::ValidatorIdOf::convert(ordered_by.clone())
-                    == Some(order_placer_acc.clone())
-            }) else {
-                // TODO: is there anything to do?
+            let Some(order_placer) = result
+                .into_iter()
+                .find(|(_, ordered_by)| {
+                    // In most implementations the validator id is same as account id.
+                    <T as pallet_session::Config>::ValidatorIdOf::convert(ordered_by.clone())
+                        == Some(order_placer_acc.clone())
+                })
+                .map(|o| o.1)
+            else {
                 return Ok(().into());
             };
 
             // TODO: reward the order placer.
-            Self::deposit_event(Event::OrderPlacerRewarded { order_placer: order.1 });
+            Self::deposit_event(Event::OrderPlacerRewarded { order_placer });
 
             Ok(().into())
         }

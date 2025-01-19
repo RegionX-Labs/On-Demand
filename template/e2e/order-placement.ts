@@ -26,6 +26,8 @@ async function orderPlacementWorks() {
     const paraEndpoint = new WsProvider(PARA_ENDPOINT);
     const paraApi = await ApiPromise.create({provider: paraEndpoint});
 
+    await force(paraApi, paraApi.tx.onDemand.setSlotWidth(4));
+
     // Configure on-demand on the relay chain
     const configureTxs = [
         relayApi.tx.configuration.setOnDemandBaseFee(1_000_000),

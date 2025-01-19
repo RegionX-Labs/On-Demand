@@ -31,6 +31,7 @@ use polkadot_sdk::{staging_xcm_builder as xcm_builder, staging_xcm_executor as x
 
 // Substrate and Polkadot dependencies
 use cumulus_pallet_parachain_system::RelayNumberMonotonicallyIncreases;
+use cumulus_pallet_parachain_system::RelaychainDataProvider;
 use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
 use frame_support::{
     derive_impl,
@@ -62,8 +63,9 @@ use super::{
     AccountId, Aura, Balance, Balances, Block, BlockNumber, CollatorSelection, ConsensusHook, Hash,
     MessageQueue, Nonce, PalletInfo, ParachainSystem, Runtime, RuntimeCall, RuntimeEvent,
     RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys,
-    System, WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, EXISTENTIAL_DEPOSIT, HOURS,
-    MAXIMUM_BLOCK_WEIGHT, MICRO_UNIT, NORMAL_DISPATCH_RATIO, SLOT_DURATION, VERSION,
+    System, ThresholdParameter, WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO,
+    EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICRO_UNIT, NORMAL_DISPATCH_RATIO,
+    SLOT_DURATION, VERSION,
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
@@ -310,24 +312,26 @@ impl pallet_collator_selection::Config for Runtime {
     type WeightInfo = ();
 }
 
-// #[cfg(feature = "runtime-benchmarks")]
-// pub struct BenchHelper;
-// #[cfg(feature = "runtime-benchmarks")]
-// impl pallet_on_demand::BenchmarkHelper<Balance> for BenchHelper {
-//     fn mock_threshold_parameter() -> Balance {
-//         1_000u32.into()
-//     }
-// }
+#[cfg(feature = "runtime-benchmarks")]
+pub struct BenchHelper;
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_on_demand::BenchmarkHelper<Balance> for BenchHelper {
+    fn mock_threshold_parameter() -> Balance {
+        1_000u32.into()
+    }
+}
 
-// impl pallet_on_demand::Config for Runtime {
-//     type RuntimeEvent = RuntimeEvent;
-//     type AdminOrigin = EnsureRoot<AccountId>;
-//     type BlockNumber = BlockNumber;
-//     type ThresholdParameter = ThresholdParameter; // Represents fee threshold.
-//     #[cfg(feature = "runtime-benchmarks")]
-//     type BenchmarkHelper = BenchHelper;
-//     type WeightInfo = ();
-// }
+impl pallet_on_demand::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type AdminOrigin = EnsureRoot<AccountId>;
+    type BlockNumber = BlockNumber;
+    type ThresholdParameter = ThresholdParameter; // Represents fee threshold.
+    type RelayChainBalance = Balance;
+    type RelayChainStateProvider = RelaychainDataProvider<Runtime>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = BenchHelper;
+    type WeightInfo = ();
+}
 
 /// Configure the pallet template in pallets/template.
 impl pallet_parachain_template::Config for Runtime {

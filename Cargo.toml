@@ -85,6 +85,7 @@ polkadot-node-primitives = { git = "https://github.com/paritytech/polkadot-sdk.g
 polkadot-node-subsystem = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 polkadot-node-subsystem-util = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 polkadot-overseer = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
+rococo-runtime = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 
 # Local
 pallet-on-demand = { path = "./pallets/on-demand", default-features = false }

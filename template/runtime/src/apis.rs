@@ -46,7 +46,7 @@ use sp_version::RuntimeVersion;
 // Local module imports
 use super::{
     AccountId, Balance, Block, BlockNumber, ConsensusHook, Executive, InherentDataExt, Nonce,
-    ParachainSystem, Runtime, RuntimeCall, RuntimeGenesisConfig, SessionKeys, System,
+    OnDemand, ParachainSystem, Runtime, RuntimeCall, RuntimeGenesisConfig, SessionKeys, System,
     ThresholdParameter, TransactionPayment, SLOT_DURATION, VERSION,
 };
 
@@ -308,12 +308,10 @@ impl_runtime_apis! {
 
     impl order_primitives::OnDemandRuntimeApi<Block, Balance, BlockNumber, ThresholdParameter> for Runtime {
         fn slot_width() -> u32 {
-            // OnDemand::slot_width()
-            0
+            OnDemand::slot_width()
         }
         fn threshold_parameter() -> ThresholdParameter {
-            0
-            // OnDemand::threshold_parameter()
+            OnDemand::threshold_parameter()
         }
     }
 }

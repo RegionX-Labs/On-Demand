@@ -34,7 +34,7 @@ use cumulus_relay_chain_interface::{BlockNumber, OverseerHandle, RelayChainInter
 use codec::Encode;
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
 use order_primitives::OnDemandRuntimeApi;
-use order_service::config::OnDemandAura;
+use order_service::config::OnDemandSlot;
 use order_service::config::OrderCriteria;
 use order_service::start_on_demand;
 use polkadot_primitives::Balance;
@@ -76,7 +76,7 @@ pub type Service = PartialComponents<
     ),
 >;
 
-type OnDemandConfig = OnDemandAura<
+type OnDemandConfig = OnDemandSlot<
     Arc<dyn RelayChainInterface>,
     ParachainClient,
     Block,
@@ -280,22 +280,20 @@ fn start_consensus(
 
     let relay_chain_interface_clone = relay_chain_interface.clone();
     let params = AuraParams {
-        create_inherent_data_providers: move |_, ()| { 
+        create_inherent_data_providers: move |_, ()| {
             let relay_chain_interface = relay_chain_interface_clone.clone();
             async move {
-                let order_inherent = order_primitives::OrderInherentData::create_at(
-                    &relay_chain_interface,
-                    para_id,
-                )
-                .await;
+                let order_inherent =
+                    order_primitives::OrderInherentData::create_at(&relay_chain_interface, para_id)
+                        .await;
 
                 let order_inherent = order_inherent.ok_or_else(|| {
-					Box::<dyn std::error::Error + Send + Sync>::from(
-						"Failed to create order inherent",
-					)
-				})?;
+                    Box::<dyn std::error::Error + Send + Sync>::from(
+                        "Failed to create order inherent",
+                    )
+                })?;
 
-                Ok(order_inherent) 
+                Ok(order_inherent)
             }
         },
         block_import,
