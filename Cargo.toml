@@ -58,6 +58,7 @@ sp-keystore = { git = "https://github.com/paritytech/polkadot-sdk.git", branch =
 sp-state-machine = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 sp-inherents = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 sp-trie = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
+sp-debug-derive = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false, features = [ "force-debug" ]}
 
 pallet-aura = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 pallet-balances = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }

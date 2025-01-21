@@ -126,7 +126,7 @@ pub mod pallet {
         /// Threshold parameter set.
         ThresholdParameterSet { parameter: T::ThresholdParameter },
         /// We rewarded the order placer.
-        OrderPlacerRewarded { order_placer: T::AccountId },
+        OrderPlacerRewarded { order_placer: T::ValidatorId },
     }
 
     #[pallet::error]
@@ -177,11 +177,6 @@ pub mod pallet {
             order_primitives::ON_DEMAND_INHERENT_IDENTIFIER;
 
         fn create_inherent(data: &InherentData) -> Option<Self::Call> {
-            log::info!(
-                target: LOG_TARGET,
-                "Create inherent"
-            );
-
             let data: OrderInherentData = data
                 .get_data(&Self::INHERENT_IDENTIFIER)
                 .ok()
@@ -258,26 +253,25 @@ pub mod pallet {
             let Some(order_placer) = Self::order_placer() else {
                 return Ok(().into());
             };
+
             let order_placer_acc = pallet_session::KeyOwner::<T>::get((
                 sp_application_crypto::key_types::AURA,
                 order_placer.to_raw_vec(),
             ))
             .ok_or(Error::<T>::FailedToGetOrderPlacerAccount)?;
 
-            let Some(order_placer) = result
-                .into_iter()
-                .find(|(_, ordered_by)| {
-                    // In most implementations the validator id is same as account id.
-                    <T as pallet_session::Config>::ValidatorIdOf::convert(ordered_by.clone())
-                        == Some(order_placer_acc.clone())
-                })
-                .map(|o| o.1)
-            else {
-                return Ok(().into());
-            };
+            // NOTE: Game theoretically we don't have to check who created the order...
+            // Only the supposed creator has the benefit to do so...
+
+            // The block in which the order is placed and the block in which the order gets finalized are
+            // not the same block..
+
+            // There are two solutions:
+            // 1. Rely purely on game theory
+            // 2. Provide the relay parent in which the order was placed.
 
             // TODO: reward the order placer.
-            Self::deposit_event(Event::OrderPlacerRewarded { order_placer });
+            Self::deposit_event(Event::OrderPlacerRewarded { order_placer: order_placer_acc });
 
             Ok(().into())
         }
