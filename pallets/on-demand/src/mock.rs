@@ -178,7 +178,6 @@ impl crate::Config for Test {
     type ThresholdParameter = Balance; // Represents fee threshold.
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelper = BenchHelper;
-    type RelayChainStateProvider = RelayChainDataProvider;
     type WeightInfo = ();
 }
 

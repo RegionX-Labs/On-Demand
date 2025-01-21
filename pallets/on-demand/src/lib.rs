@@ -24,24 +24,18 @@ pub use benchmarking::BenchmarkHelper;
 
 const LOG_TARGET: &str = "order-inherent";
 
+pub trait OnReward<AccountId> {
+    fn reward(rewardee: AccountId) -> Weight;
+}
+
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    use alloc::{boxed::Box, vec::Vec};
-    use codec::Codec;
     use codec::MaxEncodedLen;
-    use codec::{Decode, Encode};
-    use cumulus_pallet_parachain_system::{
-        relay_state_snapshot::Error as RelayError, RelayChainStateProof, RelaychainStateProvider,
-    };
+    use frame_support::weights::Weight;
     use frame_support::{traits::tokens::Balance, DefaultNoBound};
-    use frame_system::EventRecord;
-    use order_primitives::{well_known_keys::EVENTS, OrderInherentData};
-    use polkadot_primitives::Id as ParaId;
-    use polkadot_runtime_parachains::on_demand;
-    use scale_info::TypeInfo;
-    use sp_runtime::traits::{AtLeast32BitUnsigned, Convert};
+    use sp_runtime::traits::AtLeast32BitUnsigned;
     use sp_runtime::AccountId32;
     use sp_runtime::RuntimeAppPublic;
 
@@ -83,8 +77,8 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + MaxEncodedLen;
 
-        /// Type for getting the current relay chain state.
-        type RelayChainStateProvider: RelaychainStateProvider;
+        /// Type which implements the logic for rewarding order placers.
+        type OnReward: OnReward<Self::ValidatorId>;
 
         #[cfg(feature = "runtime-benchmarks")]
         type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
@@ -159,106 +153,23 @@ pub mod pallet {
     // NOTE: always place pallet-on-demand after the aura pallet.
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        fn on_finalize(_: BlockNumberFor<T>) {
-            // Update to the latest AuRa authorities.
-            //
-            // By updating the authorities on finalize we will always have the previous set
-            // from the previous block used within this pallet.
-            Authorities::<T>::put(pallet_aura::Authorities::<T>::get());
-        }
-    }
+        fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
+            let mut weight = Weight::zero();
 
-    #[pallet::inherent]
-    impl<T: Config> ProvideInherent for Pallet<T> {
-        type Call = Call<T>;
-        type Error = MakeFatalError<Error<T>>;
+            let (maybe_order_placer, _weight) = Self::order_placer();
+            weight += _weight;
 
-        const INHERENT_IDENTIFIER: InherentIdentifier =
-            order_primitives::ON_DEMAND_INHERENT_IDENTIFIER;
-
-        fn create_inherent(data: &InherentData) -> Option<Self::Call> {
-            let data: OrderInherentData = data
-                .get_data(&Self::INHERENT_IDENTIFIER)
-                .ok()
-                .flatten()
-                .expect("there is not data to be posted; qed");
-
-            Some(Call::create_order { data })
-        }
-
-        fn is_inherent(call: &Self::Call) -> bool {
-            matches!(call, Call::create_order { .. })
-        }
-    }
-
-    #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-    enum RelayChainEvent<AccountId: Codec, Balance: Codec> {
-        // TODO: specify codec index.
-        OnDemandAssignmentProvider(OnDemandEvent<AccountId, Balance>),
-    }
-
-    #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-    enum OnDemandEvent<AccountId: Codec, Balance: Codec> {
-        OnDemandOrderPlaced {
-            para_id: ParaId,
-            spot_price: Balance,
-            ordered_by: AccountId,
-        },
-        SpotPriceSet {
-            spot_price: Balance,
-        },
-    }
-
-    #[pallet::call]
-    impl<T: Config> Pallet<T> {
-        #[pallet::call_index(0)]
-        #[pallet::weight((0, DispatchClass::Mandatory))]
-        pub fn create_order(
-            origin: OriginFor<T>,
-            data: OrderInherentData,
-        ) -> DispatchResultWithPostInfo {
-            ensure_none(origin)?;
-
-            let current_state = T::RelayChainStateProvider::current_relay_chain_state();
-            let relay_state_proof = RelayChainStateProof::new(
-                data.para_id,
-                current_state.state_root,
-                data.relay_storage_proof,
-            )
-            .expect("Invalid relay chain state proof");
-
-            let events = relay_state_proof
-                .read_entry::<Vec<Box<EventRecord<rococo_runtime::RuntimeEvent, T::Hash>>>>(
-                    EVENTS, None,
-                )
-                .map_err(|e| match e {
-                    RelayError::ReadEntry(_) => Error::InvalidProof,
-                    _ => Error::<T>::FailedProofReading,
-                })?;
-
-            let result: Vec<(u128, AccountId32)> = events
-                .into_iter()
-                .filter_map(|item| match item.event {
-                    rococo_runtime::RuntimeEvent::OnDemandAssignmentProvider(
-                        on_demand::Event::OnDemandOrderPlaced {
-                            para_id,
-                            spot_price,
-                            ordered_by,
-                        },
-                    ) if para_id == data.para_id => Some((spot_price, ordered_by)),
-                    _ => None,
-                })
-                .collect();
-
-            let Some(order_placer) = Self::order_placer() else {
-                return Ok(().into());
+            let Some(order_placer) = maybe_order_placer else {
+                return weight;
             };
 
-            let order_placer_acc = pallet_session::KeyOwner::<T>::get((
+            weight += T::DbWeight::get().reads(1);
+            let Some(order_placer_acc) = pallet_session::KeyOwner::<T>::get((
                 sp_application_crypto::key_types::AURA,
                 order_placer.to_raw_vec(),
-            ))
-            .ok_or(Error::<T>::FailedToGetOrderPlacerAccount)?;
+            )) else {
+                return weight;
+            };
 
             // NOTE: Game theoretically we don't have to check who created the order...
             // Only the supposed creator has the benefit to do so...
@@ -270,17 +181,27 @@ pub mod pallet {
             // 1. Rely purely on game theory
             // 2. Provide the relay parent in which the order was placed.
 
-            // TODO: reward the order placer.
-            Self::deposit_event(Event::OrderPlacerRewarded { order_placer: order_placer_acc });
+            weight += T::OnReward::reward(order_placer_acc);
 
-            Ok(().into())
+            weight
         }
 
+        fn on_finalize(_: BlockNumberFor<T>) {
+            // Update to the latest AuRa authorities.
+            //
+            // By updating the authorities on finalize we will always have the previous set
+            // from the previous block used within this pallet.
+            Authorities::<T>::put(pallet_aura::Authorities::<T>::get());
+        }
+    }
+
+    #[pallet::call]
+    impl<T: Config> Pallet<T> {
         /// Set the slot width for on-demand blocks.
         ///
         /// - `origin`: Must be Root or pass `AdminOrigin`.
         /// - `width`: The slot width in relay chain blocks.
-        #[pallet::call_index(1)]
+        #[pallet::call_index(0)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::set_slot_width())]
         pub fn set_slot_width(origin: OriginFor<T>, width: u32) -> DispatchResult {
             T::AdminOrigin::ensure_origin_or_root(origin)?;
@@ -295,7 +216,7 @@ pub mod pallet {
         ///
         /// - `origin`: Must be Root or pass `AdminOrigin`.
         /// - `parameter`: The threshold parameter.
-        #[pallet::call_index(2)]
+        #[pallet::call_index(1)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::set_threshold_parameter())]
         pub fn set_threshold_parameter(
             origin: OriginFor<T>,
@@ -311,7 +232,7 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn order_placer() -> Option<T::AuthorityId> {
+        fn order_placer() -> (Option<T::AuthorityId>, Weight) {
             let slot_width = SlotWidth::<T>::get();
             let para_height = frame_system::Pallet::<T>::block_number();
             let authorities = Authorities::<T>::get();
@@ -319,7 +240,10 @@ pub mod pallet {
             let slot: u128 = (para_height >> slot_width).saturated_into();
             let indx = slot % authorities.len() as u128;
 
-            authorities.get(indx as usize).cloned()
+            let authority_id = authorities.get(indx as usize).cloned();
+            let weight = Weight::zero().saturating_add(T::DbWeight::get().reads(3));
+
+            (authority_id, weight)
         }
     }
 }
