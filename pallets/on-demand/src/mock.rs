@@ -1,10 +1,9 @@
-use cumulus_pallet_parachain_system::{RelayChainState, RelaychainStateProvider};
 use frame_support::{pallet_prelude::*, parameter_types, traits::Everything};
 use frame_system::{pallet_prelude::*, EnsureRoot};
 use sp_core::{ConstBool, ConstU64, H256};
 use sp_runtime::{
 	testing::UintAuthorityId,
-	traits::{BlakeTwo256, IdentityLookup, OpaqueKeys},
+	traits::{BlakeTwo256, IdentityLookup, OpaqueKeys, Convert},
 	BuildStorage, RuntimeAppPublic,
 };
 
@@ -64,7 +63,7 @@ impl frame_system::Config for Test {
 }
 
 impl pallet_balances::Config for Test {
-	type Balance = u64;
+	type Balance = Balance;
 	type DustRemoval = ();
 	type RuntimeEvent = RuntimeEvent;
 	type ExistentialDeposit = ConstU64<1>;
@@ -146,16 +145,6 @@ impl pallet_session::Config for Test {
 	type WeightInfo = ();
 }
 
-pub struct RelayChainDataProvider;
-impl RelaychainStateProvider for RelayChainDataProvider {
-	fn current_relay_chain_state() -> RelayChainState {
-		Default::default()
-	}
-
-	#[cfg(feature = "runtime-benchmarks")]
-	fn set_current_relay_chain_state(_state: RelayChainState) {}
-}
-
 #[cfg(feature = "runtime-benchmarks")]
 pub struct BenchHelper;
 #[cfg(feature = "runtime-benchmarks")]
@@ -165,12 +154,23 @@ impl crate::BenchmarkHelper<Balance> for BenchHelper {
 	}
 }
 
+pub struct ToAccountIdImpl;
+impl Convert<u64, u64> for ToAccountIdImpl {
+	fn convert(v: u64) -> u64 {
+		v
+	}
+}
+
 impl crate::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RelayChainBalance = Balance;
 	type AdminOrigin = EnsureRoot<AccountId>;
 	type BlockNumber = BlockNumber;
 	type ThresholdParameter = Balance; // Represents fee threshold.
+	type Currency = Balances;
+	type OnReward = OnDemand;
+	type RewardSize = OnDemand;
+	type ToAccountId = ToAccountIdImpl;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = BenchHelper;
 	type WeightInfo = ();

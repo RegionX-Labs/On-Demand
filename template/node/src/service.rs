@@ -278,9 +278,8 @@ fn start_consensus(
         client.clone(),
     );
 
-    let relay_chain_interface_clone = relay_chain_interface.clone();
     let params = AuraParams {
-        create_inherent_data_providers: move |_, ()| {},
+        create_inherent_data_providers: move |_, ()| async move { Ok(()) },
         block_import,
         para_client: client.clone(),
         para_backend: backend,

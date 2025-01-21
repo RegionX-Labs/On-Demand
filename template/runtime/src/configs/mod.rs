@@ -31,7 +31,6 @@ use polkadot_sdk::{staging_xcm_builder as xcm_builder, staging_xcm_executor as x
 
 // Substrate and Polkadot dependencies
 use cumulus_pallet_parachain_system::RelayNumberMonotonicallyIncreases;
-use cumulus_pallet_parachain_system::RelaychainDataProvider;
 use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
 use frame_support::{
     derive_impl,
@@ -53,7 +52,7 @@ use polkadot_runtime_common::{
     xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_runtime::Perbill;
+use sp_runtime::{Perbill, traits::Convert};
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
 
@@ -65,7 +64,7 @@ use super::{
     RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys,
     System, ThresholdParameter, WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO,
     EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICRO_UNIT, NORMAL_DISPATCH_RATIO,
-    SLOT_DURATION, VERSION,
+    SLOT_DURATION, VERSION, OnDemand,
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
@@ -321,12 +320,23 @@ impl pallet_on_demand::BenchmarkHelper<Balance> for BenchHelper {
     }
 }
 
+pub struct ToAccountIdImpl;
+impl Convert<AccountId, AccountId> for ToAccountIdImpl {
+	fn convert(v: AccountId) -> AccountId {
+		v
+	}
+}
+
 impl pallet_on_demand::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type AdminOrigin = EnsureRoot<AccountId>;
     type BlockNumber = BlockNumber;
     type ThresholdParameter = ThresholdParameter; // Represents fee threshold.
     type RelayChainBalance = Balance;
+    type Currency = Balances;
+	type OnReward = OnDemand;
+	type RewardSize = OnDemand;
+	type ToAccountId = ToAccountIdImpl;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelper = BenchHelper;
     type WeightInfo = ();
