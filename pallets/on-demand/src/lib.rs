@@ -24,8 +24,12 @@ pub use benchmarking::BenchmarkHelper;
 
 const LOG_TARGET: &str = "order-inherent";
 
-pub trait OnReward<AccountId> {
-    fn reward(rewardee: AccountId) -> Weight;
+pub trait OnReward<AccountId, Balance, R: RewardSize<Balance>> {
+    fn reward(rewardee: AccountId);
+}
+
+pub trait RewardSize<Balance> {
+    fn reward_size() -> Balance;
 }
 
 #[frame_support::pallet]
@@ -33,11 +37,14 @@ pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
     use codec::MaxEncodedLen;
+    use frame_support::traits::fungible::Inspect;
+    use frame_support::traits::fungible::Mutate;
     use frame_support::weights::Weight;
     use frame_support::{traits::tokens::Balance, DefaultNoBound};
     use sp_runtime::traits::AtLeast32BitUnsigned;
     use sp_runtime::AccountId32;
     use sp_runtime::RuntimeAppPublic;
+    use sp_runtime::Saturating;
 
     /// The module configuration trait.
     #[pallet::config]
@@ -77,8 +84,17 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + MaxEncodedLen;
 
+        /// The currency for rewarding order placers.
+        type Currency: Mutate<Self::ValidatorId>;
+
         /// Type which implements the logic for rewarding order placers.
-        type OnReward: OnReward<Self::ValidatorId>;
+        type OnReward: OnReward<
+            Self::ValidatorId,
+            <Self::Currency as Inspect<Self::ValidatorId>>::Balance,
+            Self::RewardSize,
+        >;
+
+        type RewardSize: RewardSize<<Self::Currency as Inspect<Self::ValidatorId>>::Balance>;
 
         #[cfg(feature = "runtime-benchmarks")]
         type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
@@ -181,7 +197,8 @@ pub mod pallet {
             // 1. Rely purely on game theory
             // 2. Provide the relay parent in which the order was placed.
 
-            weight += T::OnReward::reward(order_placer_acc);
+            // TODO: add weight from weights.rs
+            T::OnReward::reward(order_placer_acc);
 
             weight
         }
@@ -244,6 +261,28 @@ pub mod pallet {
             let weight = Weight::zero().saturating_add(T::DbWeight::get().reads(3));
 
             (authority_id, weight)
+        }
+    }
+
+    impl<T: Config>
+        OnReward<T::ValidatorId, <T::Currency as Inspect<T::ValidatorId>>::Balance, Self>
+        for Pallet<T>
+    {
+        fn reward(rewardee: T::ValidatorId) {
+            let reward_size = T::RewardSize::reward_size();
+            if T::Currency::mint_into(&rewardee, reward_size).is_err() {
+                return;
+            };
+            Self::deposit_event(Event::OrderPlacerRewarded {
+                order_placer: rewardee,
+            });
+        }
+    }
+
+    impl<T: Config> RewardSize<<T::Currency as Inspect<T::ValidatorId>>::Balance> for Pallet<T> {
+        fn reward_size() -> <T::Currency as Inspect<T::ValidatorId>>::Balance {
+            <T::Currency as Inspect<T::ValidatorId>>::Balance::default()
+                .saturating_add(1_000_000u32.saturated_into())
         }
     }
 }

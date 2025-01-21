@@ -327,7 +327,6 @@ impl pallet_on_demand::Config for Runtime {
     type BlockNumber = BlockNumber;
     type ThresholdParameter = ThresholdParameter; // Represents fee threshold.
     type RelayChainBalance = Balance;
-    type RelayChainStateProvider = RelaychainDataProvider<Runtime>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelper = BenchHelper;
     type WeightInfo = ();
