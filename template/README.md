@@ -1,4 +1,4 @@
-# On-Demand Example Parachain
+# On-Demand Template Parachain
 
 ### Testing process
 
@@ -8,7 +8,7 @@ Setup: https://paritytech.github.io/zombienet/cli/setup.html
 Build the parachain:
 ```
 cargo build --release
-cp target/release/parachain-example-node .
+cp target/release/parachain-template-node .
 ```
 
 Start the zombienet network:

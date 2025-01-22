@@ -52,7 +52,7 @@ use polkadot_runtime_common::{
 	xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_runtime::Perbill;
+use sp_runtime::{traits::Convert, Perbill};
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
 
@@ -60,11 +60,13 @@ use xcm::latest::prelude::BodyId;
 use super::{
 	weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
 	AccountId, Aura, Balance, Balances, Block, BlockNumber, CollatorSelection, ConsensusHook, Hash,
-	MessageQueue, Nonce, PalletInfo, ParachainSystem, Runtime, RuntimeCall, RuntimeEvent,
+	MessageQueue, Nonce, OnDemand, PalletInfo, ParachainSystem, Runtime, RuntimeCall, RuntimeEvent,
 	RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys,
-	System, WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, EXISTENTIAL_DEPOSIT, HOURS,
-	MAXIMUM_BLOCK_WEIGHT, MICRO_UNIT, NORMAL_DISPATCH_RATIO, SLOT_DURATION, VERSION,
+	System, ThresholdParameter, WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO,
+	EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICRO_UNIT, MILLI_UNIT,
+	NORMAL_DISPATCH_RATIO, SLOT_DURATION, VERSION,
 };
+use pallet_on_demand::FixedReward;
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
 parameter_types! {
@@ -277,7 +279,7 @@ impl pallet_aura::Config for Runtime {
 	type AuthorityId = AuraId;
 	type DisabledValidators = ();
 	type MaxAuthorities = ConstU32<100_000>;
-	type AllowMultipleBlocksPerSlot = ConstBool<true>;
+	type AllowMultipleBlocksPerSlot = ConstBool<false>;
 	type SlotDuration = ConstU64<SLOT_DURATION>;
 }
 
@@ -307,6 +309,41 @@ impl pallet_collator_selection::Config for Runtime {
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	type ValidatorIdOf = pallet_collator_selection::IdentityCollator;
 	type ValidatorRegistration = Session;
+	type WeightInfo = ();
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+pub struct BenchHelper;
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_on_demand::BenchmarkHelper<Balance> for BenchHelper {
+	fn mock_threshold_parameter() -> Balance {
+		1_000u32.into()
+	}
+}
+
+pub struct ToAccountIdImpl;
+impl Convert<AccountId, AccountId> for ToAccountIdImpl {
+	fn convert(v: AccountId) -> AccountId {
+		v
+	}
+}
+
+parameter_types! {
+	pub const Reward: Balance = MILLI_UNIT;
+}
+
+impl pallet_on_demand::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type AdminOrigin = EnsureRoot<AccountId>;
+	type BlockNumber = BlockNumber;
+	type ThresholdParameter = ThresholdParameter; // Represents fee threshold.
+	type RelayChainBalance = Balance;
+	type Currency = Balances;
+	type OnReward = OnDemand;
+	type RewardSize = FixedReward<Balance, Reward>;
+	type ToAccountId = ToAccountIdImpl;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = BenchHelper;
 	type WeightInfo = ();
 }
 

@@ -25,6 +25,10 @@ smallvec = { workspace = true, default-features = true }
 docify = { workspace = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc"] }
 
+# On-demand
+order-primitives = { workspace = true, default-features = false }
+pallet-on-demand = { workspace = true, default-features = false }
+
 # Local
 pallet-parachain-template = { workspace = true, default-features = false }
 
@@ -71,6 +75,8 @@ std = [
 	"cumulus-pallet-parachain-system/std",
 	"log/std",
 	"pallet-parachain-template/std",
+	"pallet-on-demand/std",
+	"order-primitives/std",
 	"polkadot-sdk/std",
 	"scale-info/std",
 	"serde_json/std",
@@ -81,12 +87,14 @@ runtime-benchmarks = [
 	"cumulus-pallet-parachain-system/runtime-benchmarks",
 	"hex-literal",
 	"pallet-parachain-template/runtime-benchmarks",
+	"pallet-on-demand/runtime-benchmarks",
 	"polkadot-sdk/runtime-benchmarks",
 ]
 
 try-runtime = [
 	"cumulus-pallet-parachain-system/try-runtime",
 	"pallet-parachain-template/try-runtime",
+	"pallet-on-demand/try-runtime",
 	"polkadot-sdk/try-runtime",
 ]
 

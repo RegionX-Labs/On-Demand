@@ -10,23 +10,23 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { workspace = true, default-features = false, features = ["derive"] }
+log = { workspace = true, default-features = false }
 scale-info = { workspace = true, default-features = false, features = ["derive"] }
 
 # Substrate
 frame-system = { workspace = true, default-features = false }
+frame-support = { workspace = true, default-features = false }
 frame-benchmarking = { workspace = true, default-features = false, optional = true }
 sp-application-crypto = { workspace = true, default-features = false }
 sp-runtime = { workspace = true, default-features = false }
-frame-support = { workspace = true, default-features = false }
 pallet-aura = { workspace = true, default-features = false }
 pallet-session = { workspace = true, default-features = false }
+pallet-staking = { workspace = true, default-features = false }
+staging-xcm-builder = { workspace = true, default-features = false }
 
 # Polkadot
 polkadot-runtime-parachains = { workspace = true, default-features = false }
-polkadot-primitives = { workspace = true }
-
-# Cumulus
-cumulus-pallet-parachain-system = { workspace = true, default-features = false }
+polkadot-primitives = { workspace = true, default-features = false }
 
 # Local
 order-primitives = { workspace = true, default-features = false }
@@ -38,9 +38,8 @@ sp-consensus-aura = { workspace = true, default-features = false }
 pallet-balances = { workspace = true, default-features = false }
 pallet-collator-selection = { workspace = true, default-features = false }
 pallet-timestamp = { workspace = true, default-features = false }
-serde = { workspace = true }
-smallvec = { workspace = true }
-		
+cumulus-pallet-parachain-system = { workspace = true, default-features = false }
+
 [features]
 default = ["std"]
 runtime-benchmarks = [
@@ -48,6 +47,8 @@ runtime-benchmarks = [
 	"frame-support/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
+	"pallet-staking/runtime-benchmarks",
+	"staging-xcm-builder/runtime-benchmarks",
 ]
 std = [
 	"codec/std",
@@ -64,11 +65,13 @@ std = [
 	"pallet-balances/std",
 	"pallet-collator-selection/std",
 	"pallet-session/std",
+	"pallet-staking/std",
 	"pallet-timestamp/std",
 	"order-primitives/std",
 	"cumulus-pallet-parachain-system/std",
 	"polkadot-runtime-parachains/std",
 	"polkadot-primitives/std",
+	"staging-xcm-builder/std",
 ]
 try-runtime = [
 	"frame-support/try-runtime",

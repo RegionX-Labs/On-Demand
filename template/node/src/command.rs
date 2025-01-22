@@ -249,12 +249,14 @@ pub fn run() -> Result<()> {
 
 				info!("Is collating: {}", if config.role.is_authority() { "yes" } else { "no" });
 
+				let baseline_balance = cli.on_demand_baseline_balance;
 				crate::service::start_parachain_node(
 					config,
 					polkadot_config,
 					collator_options,
 					id,
 					hwbench,
+					baseline_balance,
 				)
 				.await
 				.map(|r| r.0)

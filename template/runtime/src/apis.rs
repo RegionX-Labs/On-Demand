@@ -45,9 +45,9 @@ use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-	AccountId, Balance, Block, ConsensusHook, Executive, InherentDataExt, Nonce, ParachainSystem,
-	Runtime, RuntimeCall, RuntimeGenesisConfig, SessionKeys, System, TransactionPayment,
-	SLOT_DURATION, VERSION,
+	AccountId, Balance, Block, BlockNumber, ConsensusHook, Executive, InherentDataExt, Nonce,
+	OnDemand, ParachainSystem, Runtime, RuntimeCall, RuntimeGenesisConfig, SessionKeys, System,
+	ThresholdParameter, TransactionPayment, SLOT_DURATION, VERSION,
 };
 
 // we move some impls outside so we can easily use them with `docify`.
@@ -303,6 +303,15 @@ impl_runtime_apis! {
 
 		fn preset_names() -> Vec<sp_genesis_builder::PresetId> {
 			crate::genesis_config_presets::preset_names()
+		}
+	}
+
+	impl order_primitives::OnDemandRuntimeApi<Block, Balance, BlockNumber, ThresholdParameter> for Runtime {
+		fn slot_width() -> u32 {
+			OnDemand::slot_width()
+		}
+		fn threshold_parameter() -> ThresholdParameter {
+			OnDemand::threshold_parameter()
 		}
 	}
 }

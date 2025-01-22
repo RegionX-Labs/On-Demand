@@ -37,6 +37,8 @@ use core::marker::PhantomData;
 pub trait WeightInfo {
 	fn set_slot_width() -> Weight;
 	fn set_threshold_parameter() -> Weight;
+	fn set_bulk_mode() -> Weight;
+	fn on_reward() -> Weight;
 }
 
 /// Weights for `pallet_on_demand` using the Substrate node and recommended hardware.
@@ -62,6 +64,26 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		Weight::from_parts(3_487_000, 0)
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
+	/// Storage: `OnDemand::ThresholdParameter` (r:0 w:1)
+	/// Proof: `OnDemand::ThresholdParameter` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
+	fn set_bulk_mode() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `0`
+		//  Estimated: `0`
+		// Minimum execution time: 3_326_000 picoseconds.
+		Weight::from_parts(3_487_000, 0)
+			.saturating_add(T::DbWeight::get().writes(1_u64))
+	}
+	/// Storage: `OnDemand::ThresholdParameter` (r:0 w:1)
+	/// Proof: `OnDemand::ThresholdParameter` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
+	fn on_reward() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `0`
+		//  Estimated: `0`
+		// Minimum execution time: 3_326_000 picoseconds.
+		Weight::from_parts(3_487_000, 0)
+			.saturating_add(T::DbWeight::get().writes(1_u64))
+	}
 }
 
 // For backwards compatibility and tests.
@@ -79,6 +101,26 @@ impl WeightInfo for () {
 	/// Storage: `OnDemand::ThresholdParameter` (r:0 w:1)
 	/// Proof: `OnDemand::ThresholdParameter` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
 	fn set_threshold_parameter() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `0`
+		//  Estimated: `0`
+		// Minimum execution time: 3_326_000 picoseconds.
+		Weight::from_parts(3_487_000, 0)
+			.saturating_add(RocksDbWeight::get().writes(1_u64))
+	}
+	/// Storage: `OnDemand::ThresholdParameter` (r:0 w:1)
+	/// Proof: `OnDemand::ThresholdParameter` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
+	fn set_bulk_mode() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `0`
+		//  Estimated: `0`
+		// Minimum execution time: 3_326_000 picoseconds.
+		Weight::from_parts(3_487_000, 0)
+			.saturating_add(RocksDbWeight::get().writes(1_u64))
+	}
+	/// Storage: `OnDemand::ThresholdParameter` (r:0 w:1)
+	/// Proof: `OnDemand::ThresholdParameter` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
+	fn on_reward() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `0`

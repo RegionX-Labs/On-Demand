@@ -72,6 +72,9 @@ pub type SignedBlock = generic::SignedBlock<Block>;
 /// BlockId type as expected by this runtime.
 pub type BlockId = generic::BlockId<Block>;
 
+/// On-demand order creation threshold parameter.
+pub type ThresholdParameter = Balance;
+
 /// The extension to the basic transaction logic.
 #[docify::export(template_signed_extra)]
 pub type TxExtension = (
@@ -182,7 +185,7 @@ mod block_times {
 	/// slot_duration()`.
 	///
 	/// Change this to adjust the block time.
-	pub const MILLI_SECS_PER_BLOCK: u64 = 6000;
+	pub const MILLI_SECS_PER_BLOCK: u64 = 12000;
 
 	// NOTE: Currently it is not possible to change the slot duration after the chain has started.
 	// Attempting to do so will brick block production.
@@ -222,7 +225,7 @@ const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_parts(
 mod async_backing_params {
 	/// Maximum number of blocks simultaneously accepted by the Runtime, not yet included
 	/// into the relay chain.
-	pub(crate) const UNINCLUDED_SEGMENT_CAPACITY: u32 = 3;
+	pub(crate) const UNINCLUDED_SEGMENT_CAPACITY: u32 = 1;
 	/// How many parachain blocks are processed by the relay chain per parent. Limits the
 	/// number of blocks authored per slot.
 	pub(crate) const BLOCK_PROCESSING_VELOCITY: u32 = 1;
@@ -303,6 +306,10 @@ mod runtime {
 	pub type CumulusXcm = cumulus_pallet_xcm;
 	#[runtime::pallet_index(33)]
 	pub type MessageQueue = pallet_message_queue;
+
+	// On-demand
+	#[runtime::pallet_index(40)]
+	pub type OnDemand = pallet_on_demand;
 
 	// Template
 	#[runtime::pallet_index(50)]

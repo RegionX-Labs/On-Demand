@@ -27,14 +27,16 @@ id = 2000
 name = "charlie"
 ws_port = 9988
 command = "parachain-template-node"
+args = ["--log=pallet-on-demand=trace --execution native"]
 
 [[parachains.collators]]
 name = "eve"
 ws_port = 9977
 command = "parachain-template-node"
+args = ["--log=pallet-on-demand=trace --execution native"]
 
 [[parachains.collators]]
 name = "ferdie"
 ws_port = 9966
 command = "parachain-template-node"
-
+args = ["--log=pallet-on-demand=trace --execution native"]
