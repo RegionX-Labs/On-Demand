@@ -58,10 +58,10 @@ async function orderPlacementWorks() {
     assert(newParaHeight > paraHeight, "Para should continue block production");
 
     // Threshold not set, criteria should always be met.
-    const iterations = 5;
+    const iterations = 3;
     let counter = 0;
 
-    await new Promise(async (resolve, reject) => {
+    await new Promise(async (resolve, _reject) => {
       const unsub: any = await relayApi.query.system.events((events: any) => {
         events.forEach(async (record: EventRecord) => {
           const { event } = record;

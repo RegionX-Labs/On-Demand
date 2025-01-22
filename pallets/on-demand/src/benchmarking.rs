@@ -2,6 +2,8 @@
 
 use super::*;
 
+const SEED: u32 = 0;
+
 pub trait BenchmarkHelper<ThresholdParameter> {
 	// Return a mock threshold parameter that is not the default value.
 	fn mock_threshold_parameter() -> ThresholdParameter;
@@ -40,6 +42,30 @@ mod benchmarks {
 		_(origin as T::RuntimeOrigin, param.clone());
 
 		assert_last_event::<T>(Event::ThresholdParameterSet { parameter: param }.into());
+		Ok(())
+	}
+
+	#[benchmark]
+	fn set_bulk_mode() -> Result<(), BenchmarkError> {
+		let origin =
+			T::AdminOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
+
+		#[extrinsic_call]
+		_(origin as T::RuntimeOrigin, true);
+
+		assert_last_event::<T>(Event::BulkModeSet { bulk_mode: true }.into());
+		Ok(())
+	}
+
+	#[benchmark]
+	fn on_reward() -> Result<(), BenchmarkError> {
+		let rewardee: T::AccountId = account("rewardee", 0, SEED);
+
+		#[block]
+		{
+			T::OnReward::reward(rewardee);
+		}
+
 		Ok(())
 	}
 

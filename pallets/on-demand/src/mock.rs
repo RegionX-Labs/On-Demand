@@ -1,9 +1,10 @@
+use crate::FixedReward;
 use frame_support::{pallet_prelude::*, parameter_types, traits::Everything};
 use frame_system::{pallet_prelude::*, EnsureRoot};
 use sp_core::{ConstBool, ConstU64, H256};
 use sp_runtime::{
 	testing::UintAuthorityId,
-	traits::{BlakeTwo256, IdentityLookup, OpaqueKeys, Convert},
+	traits::{BlakeTwo256, Convert, IdentityLookup, OpaqueKeys},
 	BuildStorage, RuntimeAppPublic,
 };
 
@@ -161,6 +162,10 @@ impl Convert<u64, u64> for ToAccountIdImpl {
 	}
 }
 
+parameter_types! {
+	pub const Reward: u64 = 1_000_000;
+}
+
 impl crate::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RelayChainBalance = Balance;
@@ -169,7 +174,7 @@ impl crate::Config for Test {
 	type ThresholdParameter = Balance; // Represents fee threshold.
 	type Currency = Balances;
 	type OnReward = OnDemand;
-	type RewardSize = OnDemand;
+	type RewardSize = FixedReward<Balance, Reward>;
 	type ToAccountId = ToAccountIdImpl;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = BenchHelper;

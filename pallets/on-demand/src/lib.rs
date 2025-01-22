@@ -4,7 +4,7 @@
 
 extern crate alloc;
 
-use frame_support::pallet_prelude::*;
+use frame_support::{pallet_prelude::*, traits::tokens::Balance as BalanceT};
 use frame_system::pallet_prelude::*;
 use sp_runtime::SaturatedConversion;
 
@@ -21,8 +21,6 @@ pub mod weights;
 
 #[cfg(feature = "runtime-benchmarks")]
 pub use benchmarking::BenchmarkHelper;
-
-const LOG_TARGET: &str = "order-inherent";
 
 pub trait OnReward<AccountId, Balance, R: RewardSize<Balance>> {
 	fn reward(rewardee: AccountId);
@@ -45,14 +43,14 @@ pub mod pallet {
 		weights::Weight,
 		DefaultNoBound,
 	};
-	use sp_runtime::{traits::AtLeast32BitUnsigned, RuntimeAppPublic, Saturating};
-    use sp_runtime::traits::Convert;
+	use sp_runtime::{
+		traits::{AtLeast32BitUnsigned, Convert},
+		RuntimeAppPublic,
+	};
 
 	/// The module configuration trait.
 	#[pallet::config]
-	pub trait Config:
-		frame_system::Config + pallet_aura::Config + pallet_session::Config
-	{
+	pub trait Config: frame_system::Config + pallet_aura::Config + pallet_session::Config {
 		/// The overarching event type.
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -96,11 +94,11 @@ pub mod pallet {
 			Self::RewardSize,
 		>;
 
-        /// Reward size for order placers.
+		/// Reward size for order placers.
 		type RewardSize: RewardSize<<Self::Currency as Inspect<Self::AccountId>>::Balance>;
 
-        /// Type converting `Self::ValidatorId` to `Self::AccountId`.
-        type ToAccountId: Convert<Self::ValidatorId, Self::AccountId>;
+		/// Type converting `Self::ValidatorId` to `Self::AccountId`.
+		type ToAccountId: Convert<Self::ValidatorId, Self::AccountId>;
 
 		#[cfg(feature = "runtime-benchmarks")]
 		type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
@@ -134,6 +132,11 @@ pub mod pallet {
 	#[pallet::getter(fn threshold_parameter)]
 	pub type ThresholdParameter<T: Config> = StorageValue<_, T::ThresholdParameter, ValueQuery>;
 
+	/// When in bulk mode we skip the `on_initialize` logic of this pallet
+	#[pallet::storage]
+	#[pallet::getter(fn bulk_mode)]
+	pub type BulkMode<T: Config> = StorageValue<_, (), OptionQuery>;
+
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
@@ -143,6 +146,8 @@ pub mod pallet {
 		ThresholdParameterSet { parameter: T::ThresholdParameter },
 		/// We rewarded the order placer.
 		OrderPlacerRewarded { order_placer: T::AccountId },
+		/// Bulk mode set.
+		BulkModeSet { bulk_mode: bool },
 	}
 
 	#[pallet::error]
@@ -178,6 +183,16 @@ pub mod pallet {
 		fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
 			let mut weight = Weight::zero();
 
+			weight += T::DbWeight::get().reads(1);
+			if BulkMode::<T>::get().is_some() {
+				return weight;
+			}
+
+			weight += T::DbWeight::get().reads(1);
+			if Authorities::<T>::get().len().is_zero() {
+				return weight;
+			}
+
 			let (maybe_order_placer, _weight) = Self::order_placer();
 			weight += _weight;
 
@@ -203,7 +218,7 @@ pub mod pallet {
 			// 1. Rely purely on game theory
 			// 2. Provide the relay parent in which the order was placed.
 
-			// TODO: add weight from weights.rs
+			weight += <T as pallet::Config>::WeightInfo::on_reward();
 			T::OnReward::reward(T::ToAccountId::convert(order_placer_acc));
 
 			weight
@@ -252,6 +267,26 @@ pub mod pallet {
 
 			Ok(())
 		}
+
+		/// Set the threshold parameter.
+		///
+		/// - `origin`: Must be Root or pass `AdminOrigin`.
+		/// - `bulk_mode`: Defines whether we want to switch to bulk mode.
+		#[pallet::call_index(2)]
+		#[pallet::weight(<T as pallet::Config>::WeightInfo::set_bulk_mode())]
+		pub fn set_bulk_mode(origin: OriginFor<T>, bulk_mode: bool) -> DispatchResult {
+			T::AdminOrigin::ensure_origin_or_root(origin)?;
+
+			if bulk_mode {
+				BulkMode::<T>::set(Some(()));
+			} else {
+				BulkMode::<T>::kill();
+			}
+
+			Self::deposit_event(Event::BulkModeSet { bulk_mode });
+
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -271,7 +306,8 @@ pub mod pallet {
 	}
 
 	impl<T: Config>
-		OnReward<T::AccountId, <T::Currency as Inspect<T::AccountId>>::Balance, Self> for Pallet<T>
+		OnReward<T::AccountId, <T::Currency as Inspect<T::AccountId>>::Balance, T::RewardSize>
+		for Pallet<T>
 	{
 		fn reward(rewardee: T::AccountId) {
 			let reward_size = T::RewardSize::reward_size();
@@ -281,11 +317,11 @@ pub mod pallet {
 			Self::deposit_event(Event::OrderPlacerRewarded { order_placer: rewardee });
 		}
 	}
+}
 
-	impl<T: Config> RewardSize<<T::Currency as Inspect<T::AccountId>>::Balance> for Pallet<T> {
-		fn reward_size() -> <T::Currency as Inspect<T::AccountId>>::Balance {
-			<T::Currency as Inspect<T::AccountId>>::Balance::default()
-				.saturating_add(1_000_000u32.saturated_into())
-		}
+pub struct FixedReward<Balance: BalanceT, Amount: Get<Balance>>(PhantomData<(Balance, Amount)>);
+impl<Balance: BalanceT, Amount: Get<Balance>> RewardSize<Balance> for FixedReward<Balance, Amount> {
+	fn reward_size() -> Balance {
+		Balance::default().saturating_add(Amount::get())
 	}
 }
