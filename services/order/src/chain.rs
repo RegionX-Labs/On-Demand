@@ -149,11 +149,11 @@ where
 /// Is this a parathread?
 pub async fn is_parathread(
 	relay_chain: &(impl RelayChainInterface + Clone),
-	p_hash: H256,
+	r_hash: H256,
 	para_id: ParaId,
 ) -> Result<bool, Box<dyn Error>> {
 	let para_lifecycle_storage = relay_chain
-		.get_storage_by_key(p_hash, para_lifecycle(para_id).as_slice())
+		.get_storage_by_key(r_hash, para_lifecycle(para_id).as_slice())
 		.await?;
 	let para_lifecycle = para_lifecycle_storage
 		.map(|raw| <ParaLifecycle>::decode(&mut &raw[..]))

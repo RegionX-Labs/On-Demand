@@ -17,14 +17,17 @@ use cumulus_primitives_core::{
 use cumulus_relay_chain_interface::{RelayChainInterface, RelayChainResult};
 use futures::{pin_mut, select, FutureExt, Stream, StreamExt};
 use order_primitives::{
-	well_known_keys::{account, ON_DEMAND_QUEUE},
+	well_known_keys::{account, session_key_owner, ON_DEMAND_QUEUE},
 	EnqueuedOrder,
 };
-use polkadot_primitives::OccupiedCoreAssumption;
+use polkadot_primitives::{AccountId, OccupiedCoreAssumption};
 use sc_service::TaskManager;
 use sp_core::H256;
 use sp_keystore::KeystorePtr;
-use sp_runtime::{traits::Block as BlockT, RuntimeAppPublic};
+use sp_runtime::{
+	traits::{Block as BlockT, Header},
+	RuntimeAppPublic,
+};
 use std::{error::Error, net::SocketAddr, sync::Arc};
 
 mod chain;
@@ -210,11 +213,24 @@ where
 		return Ok(());
 	}
 
+	let head_encoded = validation_data.clone().parent_head.0;
+	let para_head = <<Config::Block as BlockT>::Header>::decode(&mut &head_encoded[..])?;
+
 	for acc in keystore.keys(sp_application_crypto::key_types::AURA)?.iter() {
 		// Check if any of the accounts is below the baseline balance.
 
+		let key_owner_storage = relay_chain
+			.get_storage_by_key(
+				para_head.hash(),
+				session_key_owner(sp_application_crypto::key_types::AURA, acc.clone()).as_slice(),
+			)
+			.await?;
+		let key_owner =
+			key_owner_storage.map(|raw| <AccountId>::decode(&mut &raw[..])).transpose()?;
+
 		// TODO: get the account id from the session pallet.
-		let rc_account_storage = relay_chain.get_storage_by_key(r_hash, &account(acc)).await?;
+		let rc_account_storage =
+			relay_chain.get_storage_by_key(r_hash, &account(key_owner)).await?;
 		if let Some(rc_account_storage) = rc_account_storage {
 			let rc_account: AccountInfo<Nonce, AccountData<Config::Balance>> =
 				AccountInfo::decode(&mut &rc_account_storage[..])?;
@@ -228,9 +244,6 @@ where
 			}
 		}
 	}
-
-	let head_encoded = validation_data.clone().parent_head.0;
-	let para_head = <<Config::Block as BlockT>::Header>::decode(&mut &head_encoded[..])?;
 
 	let order_placer = Config::order_placer(parachain, r_hash, para_head)?.clone();
 

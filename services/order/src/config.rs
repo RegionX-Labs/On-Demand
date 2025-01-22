@@ -10,7 +10,7 @@ use sc_transaction_pool_api::MaintainedTransactionPool;
 use sp_api::ProvideRuntimeApi;
 use sp_application_crypto::RuntimeAppPublic;
 use sp_consensus_aura::AuraApi;
-use sp_core::crypto::Pair as PairT;
+use sp_core::{crypto::Pair as PairT, H256};
 use sp_runtime::traits::{
 	AtLeast32BitUnsigned, Block as BlockT, Debug, Header as HeaderT, MaybeDisplay, Member,
 	PhantomData,
@@ -25,7 +25,7 @@ pub trait OnDemandConfig {
 	type AuthorPub: Member + RuntimeAppPublic + Display + Send;
 
 	/// Block type.
-	type Block: BlockT;
+	type Block: BlockT<Hash = H256>;
 
 	/// Relay chain.
 	type R: RelayChainInterface + Clone;
@@ -96,7 +96,7 @@ where
 		+ Copy
 		+ From<u128>,
 	Pair::Public: RuntimeAppPublic + Display + Member + Codec,
-	Block: BlockT,
+	Block: BlockT<Hash = H256>,
 	<<Block as BlockT>::Header as HeaderT>::Number: Into<u128>,
 	Threshold: ThresholdParameterT,
 {
