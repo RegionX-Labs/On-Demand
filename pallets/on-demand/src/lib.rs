@@ -168,12 +168,17 @@ pub mod pallet {
 	pub struct GenesisConfig<T: Config> {
 		/// Initial threshold parameter.
 		pub threshold_parameter: T::ThresholdParameter,
+		/// Initial mode.
+		pub bulk_mode: bool,
 	}
 
 	#[pallet::genesis_build]
 	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
 			ThresholdParameter::<T>::set(self.threshold_parameter.clone());
+			if self.bulk_mode {
+				BulkMode::<T>::set(Some(()));
+			}
 		}
 	}
 

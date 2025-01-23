@@ -50,6 +50,7 @@ async function orderPlacementWorks() {
     assert(paraHeight === newParaHeight, "Para should stop with block production");
 
     await force(relayApi, relayApi.tx.parasSudoWrapper.sudoScheduleParachainDowngrade(PARA_ID));
+    await force(paraApi, paraApi.tx.onDemand.setBulkMode(false));
     // Wait for new sesion for the parachain to downgrade:
     await sleep(120 * 1000);
 
@@ -70,15 +71,17 @@ async function orderPlacementWorks() {
             console.log(`${event.method} : ${event.data}`);
             const orderPlacer = event.data[2].toString();
 
-            assert(COLLATORS.includes(orderPlacer));
+            assert(COLLATORS.includes(orderPlacer), "Order placer should be a collator");
 
             // Wait for next block to be produced:
             const unsubscribe = await paraApi.rpc.chain.subscribeNewHeads(async (head) => {
               console.log(`Parachain is at block: #${head.hash}`);
-              const header = await paraApi.derive.chain.getHeader(head.hash);
 
-              const author = header.author?.toHuman().toString();
-              console.log(`Block author: ${author}`);
+              const events = (await paraApi.query.system.events()).toHuman() as any;
+              assert(events, "Failed to get events");
+
+              const eIndx = (events as Array<EventRecord>).findIndex(record => record.event.method === 'OrderPlacerRewarded');
+              assert(eIndx >= 0, "Order placer not rewarded");
 
               unsubscribe();
             });
@@ -92,7 +95,7 @@ async function orderPlacementWorks() {
           resolve('');
         }
       });
-    })
+    });
 
     await force(paraApi, paraApi.tx.onDemand.setThresholdParameter(100_000_000));
 
