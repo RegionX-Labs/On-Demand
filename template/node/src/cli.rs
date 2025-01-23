@@ -1,4 +1,3 @@
-use crate::cumulus_primitives_core::relay_chain::Balance;
 use polkadot_sdk::*;
 use std::path::PathBuf;
 
@@ -81,13 +80,6 @@ pub struct Cli {
 	/// Relay chain arguments
 	#[arg(raw = true)]
 	pub relay_chain_args: Vec<String>,
-
-	/// Defines the 'baseline' balance in case the node is a collator.
-	///
-	/// A warning will be logged when the free relay chain balance of the collator drops below this
-	/// value.
-	#[arg(long, default_value = "1000000000000")]
-	pub on_demand_baseline_balance: Balance,
 }
 
 #[derive(Debug)]

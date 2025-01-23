@@ -1,6 +1,6 @@
 use crate::{
 	mock::{new_test_ext, OnDemand, RuntimeOrigin, System, Test},
-	Event, SlotWidth, ThresholdParameter,
+	BulkMode, Event, SlotWidth, ThresholdParameter,
 };
 use frame_support::{assert_noop, assert_ok};
 use sp_runtime::traits::BadOrigin;
@@ -40,5 +40,24 @@ fn set_threshold_parameter_works() {
 
 		// Check the emitted events
 		System::assert_last_event(Event::ThresholdParameterSet { parameter: 1_000 }.into());
+	})
+}
+
+#[test]
+fn set_bulk_mode_works() {
+	new_test_ext().execute_with(|| {
+		assert_eq!(ThresholdParameter::<Test>::get(), 0);
+
+		// Failure: Bad origin
+		assert_noop!(OnDemand::set_bulk_mode(RuntimeOrigin::signed(1), true), BadOrigin);
+
+		// Should be working fine
+		assert_ok!(OnDemand::set_bulk_mode(RuntimeOrigin::root(), true));
+
+		// Check the storage item
+		assert_eq!(BulkMode::<Test>::get(), Some(()));
+
+		// Check the emitted events
+		System::assert_last_event(Event::BulkModeSet { bulk_mode: true }.into());
 	})
 }

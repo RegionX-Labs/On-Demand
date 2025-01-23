@@ -3,31 +3,21 @@
 //! NOTE: Inspiration was taken from the Magnet(https://github.com/Magport/Magnet) on-demand integration.
 
 use crate::{
-	chain::{
-		get_spot_price, is_parathread, on_demand_cores_available,
-		polkadot::runtime_types::{frame_system::AccountInfo, pallet_balances::types::AccountData},
-	},
+	chain::{get_spot_price, is_parathread, on_demand_cores_available},
 	config::{OnDemandConfig, OrderCriteria},
 };
 use codec::Decode;
 use cumulus_primitives_core::{
-	relay_chain::{BlockNumber as RelayBlockNumber, Nonce},
-	ParaId, PersistedValidationData,
+	relay_chain::BlockNumber as RelayBlockNumber, ParaId, PersistedValidationData,
 };
 use cumulus_relay_chain_interface::{RelayChainInterface, RelayChainResult};
 use futures::{pin_mut, select, FutureExt, Stream, StreamExt};
-use order_primitives::{
-	well_known_keys::{account, session_key_owner, ON_DEMAND_QUEUE},
-	EnqueuedOrder,
-};
-use polkadot_primitives::{AccountId, OccupiedCoreAssumption};
+use order_primitives::{well_known_keys::ON_DEMAND_QUEUE, EnqueuedOrder};
+use polkadot_primitives::OccupiedCoreAssumption;
 use sc_service::TaskManager;
 use sp_core::H256;
 use sp_keystore::KeystorePtr;
-use sp_runtime::{
-	traits::{Block as BlockT, Header},
-	RuntimeAppPublic,
-};
+use sp_runtime::{traits::Block as BlockT, RuntimeAppPublic};
 use std::{error::Error, net::SocketAddr, sync::Arc};
 
 mod chain;
@@ -44,7 +34,6 @@ pub fn start_on_demand<Config>(
 	task_manager: &TaskManager,
 	keystore: KeystorePtr,
 	relay_rpc: Option<SocketAddr>,
-	rc_balance_baseline: Config::Balance,
 ) -> sc_service::error::Result<()>
 where
 	Config: OnDemandConfig + 'static,
@@ -65,7 +54,6 @@ where
 		keystore,
 		transaction_pool,
 		url,
-		rc_balance_baseline,
 	);
 
 	task_manager.spawn_essential_handle().spawn_blocking(
@@ -84,7 +72,6 @@ async fn run_on_demand_task<Config>(
 	keystore: KeystorePtr,
 	transaction_pool: Arc<Config::ExPool>,
 	relay_url: String,
-	rc_balance_baseline: Config::Balance,
 ) where
 	Config: OnDemandConfig + 'static,
 	Config::OrderPlacementCriteria:
@@ -102,13 +89,10 @@ async fn run_on_demand_task<Config>(
 		keystore,
 		transaction_pool,
 		relay_url,
-		rc_balance_baseline,
 	);
 
-	// let event_notification = event_notification(para_id, url, order_record);
 	select! {
 		_ = relay_chain_notification.fuse() => {},
-		// _ = event_notification.fuse() => {},
 	}
 }
 
@@ -119,7 +103,6 @@ async fn follow_relay_chain<Config>(
 	keystore: KeystorePtr,
 	transaction_pool: Arc<Config::ExPool>,
 	relay_url: String,
-	rc_balance_baseline: Config::Balance,
 ) where
 	Config: OnDemandConfig + 'static,
 	Config::OrderPlacementCriteria:
@@ -159,7 +142,6 @@ async fn follow_relay_chain<Config>(
 							r_hash,
 							para_id,
 							relay_url.clone(),
-							rc_balance_baseline,
 						).await;
 					},
 					None => {
@@ -182,7 +164,6 @@ async fn handle_relaychain_stream<Config>(
 	r_hash: H256,
 	para_id: ParaId,
 	relay_url: String,
-	rc_balance_baseline: Config::Balance,
 ) -> Result<(), Box<dyn Error>>
 where
 	Config: OnDemandConfig + 'static,
@@ -215,35 +196,6 @@ where
 
 	let head_encoded = validation_data.clone().parent_head.0;
 	let para_head = <<Config::Block as BlockT>::Header>::decode(&mut &head_encoded[..])?;
-
-	for acc in keystore.keys(sp_application_crypto::key_types::AURA)?.iter() {
-		// Check if any of the accounts is below the baseline balance.
-
-		let key_owner_storage = relay_chain
-			.get_storage_by_key(
-				para_head.hash(),
-				session_key_owner(sp_application_crypto::key_types::AURA, acc.clone()).as_slice(),
-			)
-			.await?;
-		let key_owner =
-			key_owner_storage.map(|raw| <AccountId>::decode(&mut &raw[..])).transpose()?;
-
-		// TODO: get the account id from the session pallet.
-		let rc_account_storage =
-			relay_chain.get_storage_by_key(r_hash, &account(key_owner)).await?;
-		if let Some(rc_account_storage) = rc_account_storage {
-			let rc_account: AccountInfo<Nonce, AccountData<Config::Balance>> =
-				AccountInfo::decode(&mut &rc_account_storage[..])?;
-
-			if rc_account.data.free <= rc_balance_baseline {
-				log::warn!(
-					target: LOG_TARGET,
-					"Low relay chain balance: {}",
-					rc_account.data.free
-				)
-			}
-		}
-	}
 
 	let order_placer = Config::order_placer(parachain, r_hash, para_head)?.clone();
 

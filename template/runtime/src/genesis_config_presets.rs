@@ -1,6 +1,7 @@
 use crate::{
-	AccountId, BalancesConfig, CollatorSelectionConfig, ParachainInfoConfig, PolkadotXcmConfig,
-	RuntimeGenesisConfig, SessionConfig, SessionKeys, SudoConfig, EXISTENTIAL_DEPOSIT,
+	AccountId, BalancesConfig, CollatorSelectionConfig, OnDemandConfig, ParachainInfoConfig,
+	PolkadotXcmConfig, RuntimeGenesisConfig, SessionConfig, SessionKeys, SudoConfig,
+	EXISTENTIAL_DEPOSIT,
 };
 
 use alloc::{vec, vec::Vec};
@@ -63,6 +64,7 @@ fn testnet_genesis(
 			..Default::default()
 		},
 		sudo: SudoConfig { key: Some(root) },
+		on_demand: OnDemandConfig { bulk_mode: true, ..Default::default() },
 		..Default::default()
 	};
 
