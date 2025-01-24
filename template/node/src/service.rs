@@ -461,6 +461,19 @@ pub async fn start_parachain_node(
 	})?;
 
 	if validator {
+		// Keep the order record in memory.
+		let order_record =
+			Arc::new(Mutex::new(OrderRecord {
+				relay_parent: None,
+				relay_height: 0,
+				relay_base: Default::default(),
+				relay_base_height: 0,
+				order_status: OrderStatus::Init,
+				validation_data: None,
+				para_id,
+				sequence_number: 0,
+				author_pub: None,
+			}));
 		start_on_demand::<OnDemandConfig>(
 			client.clone(),
 			para_id,
