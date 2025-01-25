@@ -29,11 +29,12 @@ use cumulus_primitives_core::{
 	ParaId,
 };
 use cumulus_relay_chain_interface::{BlockNumber, OverseerHandle, RelayChainInterface};
+use futures::lock::Mutex;
 
 // Substrate Imports
 use codec::Encode;
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
-use order_primitives::OnDemandRuntimeApi;
+use order_primitives::{OnDemandRuntimeApi, OrderRecord};
 use order_service::{
 	config::{OnDemandSlot, OrderCriteria},
 	start_on_demand,
@@ -253,6 +254,7 @@ fn start_consensus(
 	collator_key: CollatorPair,
 	overseer_handle: OverseerHandle,
 	announce_block: Arc<dyn Fn(Hash, Option<Vec<u8>>) + Send + Sync>,
+	order_record: Arc<Mutex<OrderRecord>>,
 ) -> Result<(), sc_service::Error> {
 	let proposer_factory = sc_basic_authorship::ProposerFactory::with_proof_recording(
 		task_manager.spawn_handle(),
@@ -271,8 +273,30 @@ fn start_consensus(
 		client.clone(),
 	);
 
+	let relay_chain_interface_clone = relay_chain_interface.clone();
 	let params = AuraParams {
-		create_inherent_data_providers: move |_, ()| async move { Ok(()) },
+		create_inherent_data_providers: move |_, ()| {
+			let relay_chain_interface = relay_chain_interface_clone.clone();
+			let order_record_clone = order_record.clone();
+			async move {
+				let record = order_record_clone.lock().await;
+				let order_inherent = order_primitives::OrderInherentData::create_at(
+					&relay_chain_interface,
+					record.relay_state_root,
+					record.relay_height,
+					para_id,
+				)
+				.await;
+
+				let order_inherent = order_inherent.ok_or_else(|| {
+					Box::<dyn std::error::Error + Send + Sync>::from(
+						"Failed to create order inherent",
+					)
+				})?;
+
+				Ok(order_inherent)
+			}
+		},
 		block_import,
 		para_client: client.clone(),
 		para_backend: backend,
@@ -463,17 +487,7 @@ pub async fn start_parachain_node(
 	if validator {
 		// Keep the order record in memory.
 		let order_record =
-			Arc::new(Mutex::new(OrderRecord {
-				relay_parent: None,
-				relay_height: 0,
-				relay_base: Default::default(),
-				relay_base_height: 0,
-				order_status: OrderStatus::Init,
-				validation_data: None,
-				para_id,
-				sequence_number: 0,
-				author_pub: None,
-			}));
+			Arc::new(Mutex::new(OrderRecord { relay_height: 0, relay_state_root: None }));
 		start_on_demand::<OnDemandConfig>(
 			client.clone(),
 			para_id,
@@ -482,6 +496,7 @@ pub async fn start_parachain_node(
 			&task_manager,
 			params.keystore_container.keystore(),
 			relay_rpc,
+			order_record.clone(),
 		)?;
 		start_consensus(
 			client.clone(),
@@ -498,6 +513,7 @@ pub async fn start_parachain_node(
 			collator_key.expect("Command line arguments do not allow this. qed"),
 			overseer_handle,
 			announce_block,
+			order_record,
 		)?;
 	}
 

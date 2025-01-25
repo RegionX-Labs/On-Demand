@@ -1,13 +1,15 @@
-use crate::{OrderInherentData, EVENTS, ON_DEMAND_INHERENT_IDENTIFIER};
+use crate::{OrderInherentData, RelayBlockNumber, EVENTS, ON_DEMAND_INHERENT_IDENTIFIER};
 use cumulus_primitives_core::{relay_chain::BlockId, ParaId};
 use cumulus_relay_chain_interface::{PHash, RelayChainInterface};
-use sp_runtime::traits::Header;
+use sp_core::H256;
 
 const LOG_TARGET: &str = "order-inherent";
 
 impl OrderInherentData {
 	pub async fn create_at(
 		relay_chain_interface: &impl RelayChainInterface,
+		relay_state_root: Option<H256>,
+		relay_height: RelayBlockNumber,
 		para_id: ParaId,
 	) -> Option<Self> {
 		let best_hash = relay_chain_interface
@@ -42,11 +44,11 @@ impl OrderInherentData {
 			target: LOG_TARGET,
 			"Submitting inherent data"
 		);
-		let state_root = header.state_root();
 
 		Some(OrderInherentData {
 			relay_storage_proof: relay_storage_proof.clone(),
-			state_root: state_root.clone(),
+			state_root: relay_state_root.clone(),
+			relay_height,
 			para_id,
 		})
 	}
