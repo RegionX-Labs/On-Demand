@@ -66,6 +66,7 @@ pallet-collator-selection = { git = "https://github.com/paritytech/polkadot-sdk.
 pallet-session = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 pallet-staking = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 pallet-timestamp = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
+pallet-transaction-payment = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 
 staging-xcm-builder = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 substrate-prometheus-endpoint = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
