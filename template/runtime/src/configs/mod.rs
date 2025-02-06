@@ -46,6 +46,7 @@ use frame_system::{
 	limits::{BlockLength, BlockWeights},
 	EnsureRoot,
 };
+use pallet_on_demand::FeeBasedCriteria;
 use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
@@ -342,6 +343,7 @@ impl pallet_on_demand::Config for Runtime {
 	type OnReward = OnDemand;
 	type RewardSize = FixedReward<Balance, Reward>;
 	type ToAccountId = ToAccountIdImpl;
+	type OrderPlacementCriteria = FeeBasedCriteria<Runtime, ExtrinsicBaseWeight>;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = BenchHelper;
 	type WeightInfo = ();

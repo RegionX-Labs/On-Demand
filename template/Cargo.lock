@@ -8916,6 +8916,7 @@ dependencies = [
  "pallet-aura",
  "pallet-session",
  "pallet-staking",
+ "pallet-transaction-payment",
  "parity-scale-codec",
  "polkadot-primitives",
  "polkadot-runtime-parachains",

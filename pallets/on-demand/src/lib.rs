@@ -354,13 +354,13 @@ impl<Balance: BalanceT, Amount: Get<Balance>> RewardSize<Balance> for FixedRewar
 	}
 }
 
-pub struct OrderPlacementCriteria<T, BaseWeight>(PhantomData<(T, BaseWeight)>)
+pub struct FeeBasedCriteria<T, BaseWeight>(PhantomData<(T, BaseWeight)>)
 where
 	T: Config<ThresholdParameter = BalanceOf<T>> + pallet_transaction_payment::Config,
 	BaseWeight: Get<Weight>,
 	T::OnChargeTransaction: OnChargeTransaction<T, Balance = BalanceOf<T>>;
 
-impl<T, BaseWeight> RuntimeOrderCriteria for OrderPlacementCriteria<T, BaseWeight>
+impl<T, BaseWeight> RuntimeOrderCriteria for FeeBasedCriteria<T, BaseWeight>
 where
 	T: Config<ThresholdParameter = BalanceOf<T>> + pallet_transaction_payment::Config,
 	BaseWeight: Get<Weight>,

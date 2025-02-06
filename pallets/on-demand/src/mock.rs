@@ -206,7 +206,7 @@ impl crate::Config for Test {
 	type OnReward = OnDemand;
 	type RewardSize = FixedReward<Balance, Reward>;
 	type ToAccountId = ToAccountIdImpl;
-	type OrderPlacementCriteria = crate::OrderPlacementCriteria<Test, BaseWeight>;
+	type OrderPlacementCriteria = crate::FeeBasedCriteria<Test, BaseWeight>;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = BenchHelper;
 	type WeightInfo = ();
