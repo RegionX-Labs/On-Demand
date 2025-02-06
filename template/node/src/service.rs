@@ -80,13 +80,13 @@ type OnDemandConfig = OnDemandSlot<
 	AuthorityPair,
 	sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient>,
 	Balance,
-	OrderPlacementCriteria,
+	FeeBasedCriteria,
 	Balance,
 >;
 
 // https://github.com/paritytech/cumulus/issues/2154
-pub struct OrderPlacementCriteria;
-impl OrderCriteria for OrderPlacementCriteria {
+pub struct FeeBasedCriteria;
+impl OrderCriteria for FeeBasedCriteria {
 	type Block = Block;
 	type P = ParachainClient;
 	type ExPool = sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient>;
