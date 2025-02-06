@@ -7,7 +7,7 @@ extern crate alloc;
 use cumulus_primitives_core::relay_chain;
 use frame_support::{pallet_prelude::*, traits::tokens::Balance as BalanceT};
 use frame_system::pallet_prelude::*;
-use sp_runtime::SaturatedConversion;
+use sp_runtime::{traits::Header, SaturatedConversion};
 
 pub use pallet::*;
 
@@ -68,6 +68,7 @@ pub mod pallet {
 		traits::{AtLeast32BitUnsigned, Convert},
 		AccountId32, RuntimeAppPublic,
 	};
+	use sp_core::H256;
 
 	/// The module configuration trait.
 	#[pallet::config]
@@ -129,6 +130,9 @@ pub mod pallet {
 		/// Type for getting the current relay chain state.
 		type RelayChainStateProvider: RelaychainStateProvider;
 
+		/// Relay chain header type.
+		type RelayChainHeader: Header<Hash = H256, Number = relay_chain::BlockNumber>;
+
 		#[cfg(feature = "runtime-benchmarks")]
 		type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
 
@@ -166,14 +170,6 @@ pub mod pallet {
 	#[pallet::getter(fn bulk_mode)]
 	pub type BulkMode<T: Config> = StorageValue<_, (), OptionQuery>;
 
-	/// The last `StateHistoryDepth` headers. This is used to confirm the validity of order proofs.
-	///
-	/// Arranged as a ring buffer with `block_number % T::StateHistoryDepth` being the index.
-	#[pallet::storage]
-	#[pallet::getter(fn relay_state_history)]
-	pub type RelayStateHistory<T: Config> =
-		StorageValue<_, BoundedVec<RelayChainState, T::StateHistoryDepth>, ValueQuery>;
-
 	/// Keeps track of the relay chain block number in which the last on-demand order was submitted.
 	///
 	/// We use this to prove order proof validity. Collator cannot provide proof to an order that
@@ -210,6 +206,8 @@ pub mod pallet {
 		FailedToGetOrderPlacerAccount,
 		/// We failed to decode inherent data.
 		FailedToDecodeInherentData,
+		/// Missing the block in which the order was made.
+		MissingBlock,
 	}
 
 	#[pallet::genesis_config]
@@ -261,7 +259,7 @@ pub mod pallet {
 				"Create inherent"
 			);
 
-			let data: OrderInherentData = data
+			let data: OrderInherentData<T::RelayChainHeader> = data
 				.get_data(&Self::INHERENT_IDENTIFIER)
 				.ok()
 				.flatten()
@@ -281,7 +279,7 @@ pub mod pallet {
 		#[pallet::weight((0, DispatchClass::Mandatory))]
 		pub fn create_order(
 			origin: OriginFor<T>,
-			data: OrderInherentData,
+			data: OrderInherentData<T::RelayChainHeader>,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
@@ -292,38 +290,34 @@ pub mod pallet {
 				return Ok(().into());
 			}
 
-			let cumulus_pallet_parachain_system::RelayChainState { number, state_root } =
-				T::RelayChainStateProvider::current_relay_chain_state();
-
-			let state = RelayChainState { number, state_root };
-			RelayStateHistory::<T>::mutate(|ref mut history| {
-				if history.try_push(state.clone()).is_err() {
-					let index = (number % T::StateHistoryDepth::get()) as usize;
-					history[index] = state;
-				}
-			});
+			let Some(block) = data.ancestors.first() else {
+				return Err(Error::<T>::MissingBlock.into());
+			};
 
 			ensure!(
-				data.relay_height <= LastOrder::<T>::get() || LastOrder::<T>::get().is_zero(),
+				*block.number() <= LastOrder::<T>::get() || LastOrder::<T>::get().is_zero(),
 				Error::<T>::OldProof
 			);
 
-			let Some(data_state_root) = data.state_root else {
-				return Err(Error::<T>::MissingStateRoot.into());
-			};
+			// Things TO DO:
+			// Prove that order was within a relay chain block that is an ancestor of our current
+			// relay parent.
+			let current_state_root = T::RelaychainDataProvider::current_relay_chain_state();
 
-			let history = RelayStateHistory::<T>::get();
-
-			if !history.contains(&RelayChainState {
-				number: data.relay_height,
-				state_root: data_state_root,
-			}) {
-				return Ok(().into())
+			for header in data.ancestors.iter() {
+				
 			}
 
-			let relay_state_proof =
-				RelayChainStateProof::new(data.para_id, data_state_root, data.relay_storage_proof)
-					.expect("Invalid relay chain state proof");
+			// If the last verified parent is the ancestor, it's valid
+
+			// TODO: ensure we were supposed to place an order.
+
+			let relay_state_proof = RelayChainStateProof::new(
+				data.para_id,
+				*block.state_root(),
+				data.relay_storage_proof,
+			)
+			.expect("Invalid relay chain state proof");
 
 			let events = relay_state_proof
 				.read_entry::<Vec<Box<EventRecord<rococo_runtime::RuntimeEvent, T::Hash>>>>(
@@ -365,7 +359,7 @@ pub mod pallet {
 				return Ok(().into());
 			};
 
-			LastOrder::<T>::set(data.relay_height);
+			LastOrder::<T>::set(*block.number());
 
 			T::OnReward::reward(T::ToAccountId::convert(order_placer_acc));
 

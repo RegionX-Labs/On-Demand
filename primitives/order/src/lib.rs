@@ -6,7 +6,7 @@ use cumulus_primitives_core::{relay_chain::BlockNumber as RelayBlockNumber, Para
 use frame_support::{pallet_prelude::InherentIdentifier, Parameter};
 use scale_info::TypeInfo;
 use sp_core::H256;
-use sp_runtime::traits::{MaybeDisplay, MaybeSerializeDeserialize, Member};
+use sp_runtime::traits::{Header as HeaderT, MaybeDisplay, MaybeSerializeDeserialize, Member};
 
 #[cfg(feature = "std")]
 pub mod inherent;
@@ -16,11 +16,13 @@ pub mod well_known_keys;
 pub const ON_DEMAND_INHERENT_IDENTIFIER: InherentIdentifier = *b"orderiht";
 
 #[derive(Encode, Decode, sp_core::RuntimeDebug, Clone, PartialEq, TypeInfo)]
-pub struct OrderInherentData {
+pub struct OrderInherentData<Header: HeaderT> {
 	pub relay_storage_proof: sp_trie::StorageProof,
-	pub state_root: Option<H256>,
-	pub relay_height: RelayBlockNumber,
 	pub para_id: ParaId,
+	/// We need ancestors to ensure that the `state_root` belongs to an actual ancestor block.
+	///
+	/// The order is placed in the first block of the vec.
+	pub ancestors: Vec<Header>,
 }
 
 #[derive(Encode, Decode, sp_core::RuntimeDebug, Clone, PartialEq, TypeInfo)]

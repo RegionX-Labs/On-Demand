@@ -19,6 +19,7 @@ frame-support = { workspace = true, default-features = false }
 frame-benchmarking = { workspace = true, default-features = false, optional = true }
 sp-application-crypto = { workspace = true, default-features = false }
 sp-runtime = { workspace = true, default-features = false }
+sp-core = { workspace = true, default-features = false }
 pallet-aura = { workspace = true, default-features = false }
 pallet-session = { workspace = true, default-features = false }
 pallet-staking = { workspace = true, default-features = false }
@@ -37,7 +38,6 @@ cumulus-pallet-parachain-system = { workspace = true, default-features = false }
 order-primitives = { workspace = true, default-features = false }
 
 [dev-dependencies]
-sp-core = { workspace = true, default-features = false }
 sp-io = { workspace = true, default-features = false }
 sp-consensus-aura = { workspace = true, default-features = false }
 pallet-balances = { workspace = true, default-features = false }
