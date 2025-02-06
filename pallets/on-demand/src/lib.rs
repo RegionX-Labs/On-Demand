@@ -114,6 +114,9 @@ pub mod pallet {
 		/// Type converting `Self::ValidatorId` to `Self::AccountId`.
 		type ToAccountId: Convert<Self::ValidatorId, Self::AccountId>;
 
+		/// Implements logic to check whether an order should have been placed.
+		type OrderPlacementCriteria: RuntimeOrderCriteria;
+
 		#[cfg(feature = "runtime-benchmarks")]
 		type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
 
@@ -212,7 +215,11 @@ pub mod pallet {
 				return weight;
 			}
 
-			// TODO: ensure
+			if !T::OrderPlacementCriteria::should_place_order() {
+				// Short-circuit: the order placer doesn't get rewarded.
+				return weight
+					.saturating_add(<T as pallet::Config>::WeightInfo::should_place_order());
+			}
 
 			let (maybe_order_placer, _weight) = Self::order_placer();
 			weight += _weight;

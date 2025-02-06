@@ -1,7 +1,13 @@
 use crate::FixedReward;
-use frame_support::{pallet_prelude::*, parameter_types, traits::Everything};
+use frame_support::{
+	pallet_prelude::*,
+	parameter_types,
+	traits::Everything,
+	weights::{ConstantMultiplier, IdentityFee},
+};
 use frame_system::{pallet_prelude::*, EnsureRoot};
-use sp_core::{ConstBool, ConstU64, H256};
+use pallet_transaction_payment::FungibleAdapter;
+use sp_core::{ConstBool, ConstU64, ConstU8, H256};
 use sp_runtime::{
 	testing::UintAuthorityId,
 	traits::{BlakeTwo256, Convert, IdentityLookup, OpaqueKeys},
@@ -17,6 +23,7 @@ frame_support::construct_runtime!(
 	pub enum Test
 	{
 		System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
+		TransactionPayment: pallet_transaction_payment,
 		Balances: pallet_balances,
 		Timestamp: pallet_timestamp,
 		Aura: pallet_aura,
@@ -146,6 +153,27 @@ impl pallet_session::Config for Test {
 	type WeightInfo = ();
 }
 
+pub struct MockTxPaymentWeights;
+impl pallet_transaction_payment::WeightInfo for MockTxPaymentWeights {
+	fn charge_transaction_payment() -> Weight {
+		Weight::from_parts(10, 0)
+	}
+}
+
+parameter_types! {
+	pub const TransactionByteFee: Balance = 0;
+}
+
+impl pallet_transaction_payment::Config for Test {
+	type RuntimeEvent = RuntimeEvent;
+	type OnChargeTransaction = FungibleAdapter<Balances, ()>;
+	type OperationalFeeMultiplier = ConstU8<5>;
+	type WeightToFee = IdentityFee<Balance>;
+	type LengthToFee = ConstantMultiplier<Balance, TransactionByteFee>;
+	type FeeMultiplierUpdate = ();
+	type WeightInfo = MockTxPaymentWeights;
+}
+
 #[cfg(feature = "runtime-benchmarks")]
 pub struct BenchHelper;
 #[cfg(feature = "runtime-benchmarks")]
@@ -164,6 +192,8 @@ impl Convert<u64, u64> for ToAccountIdImpl {
 
 parameter_types! {
 	pub const Reward: u64 = 1_000_000;
+	pub const BaseWeight: Weight =
+		Weight::from_parts(125_000, 0);
 }
 
 impl crate::Config for Test {
@@ -176,6 +206,7 @@ impl crate::Config for Test {
 	type OnReward = OnDemand;
 	type RewardSize = FixedReward<Balance, Reward>;
 	type ToAccountId = ToAccountIdImpl;
+	type OrderPlacementCriteria = crate::OrderPlacementCriteria<Test, BaseWeight>;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = BenchHelper;
 	type WeightInfo = ();

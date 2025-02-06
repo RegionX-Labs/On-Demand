@@ -69,5 +69,15 @@ mod benchmarks {
 		Ok(())
 	}
 
+	#[benchmark]
+	fn should_place_order() -> Result<(), BenchmarkError> {
+		#[block]
+		{
+			T::OrderPlacementCriteria::should_place_order();
+		}
+
+		Ok(())
+	}
+
 	impl_benchmark_test_suite!(Pallet, crate::mock::new_test_ext(), crate::mock::Test);
 }
