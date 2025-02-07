@@ -4,11 +4,18 @@
 
 extern crate alloc;
 
-use frame_support::{pallet_prelude::*, traits::tokens::Balance as BalanceT};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{fungible::Inspect, tokens::Balance as BalanceT},
+};
 use frame_system::pallet_prelude::*;
-use sp_runtime::SaturatedConversion;
+use pallet_transaction_payment::OnChargeTransaction;
+use sp_runtime::{FixedPointNumber, SaturatedConversion, Saturating};
 
 pub use pallet::*;
+
+type BalanceOf<T> =
+	<<T as pallet::Config>::Currency as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
@@ -23,11 +30,18 @@ pub mod weights;
 pub use benchmarking::BenchmarkHelper;
 
 pub trait OnReward<AccountId, Balance, R: RewardSize<Balance>> {
+	/// Reward logic.
 	fn reward(rewardee: AccountId);
 }
 
 pub trait RewardSize<Balance> {
+	/// Determines the reward size the order placer will receive.
 	fn reward_size() -> Balance;
+}
+
+pub trait RuntimeOrderCriteria {
+	/// Returns true or false depending on whether an order should be placed.
+	fn should_place_order() -> bool;
 }
 
 #[frame_support::pallet]
@@ -99,6 +113,9 @@ pub mod pallet {
 
 		/// Type converting `Self::ValidatorId` to `Self::AccountId`.
 		type ToAccountId: Convert<Self::ValidatorId, Self::AccountId>;
+
+		/// Implements logic to check whether an order should have been placed.
+		type OrderPlacementCriteria: RuntimeOrderCriteria;
 
 		#[cfg(feature = "runtime-benchmarks")]
 		type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
@@ -196,6 +213,12 @@ pub mod pallet {
 			weight += T::DbWeight::get().reads(1);
 			if Authorities::<T>::get().len().is_zero() {
 				return weight;
+			}
+
+			if !T::OrderPlacementCriteria::should_place_order() {
+				// Short-circuit: the order placer doesn't get rewarded.
+				return weight
+					.saturating_add(<T as pallet::Config>::WeightInfo::should_place_order());
 			}
 
 			let (maybe_order_placer, _weight) = Self::order_placer();
@@ -328,5 +351,38 @@ pub struct FixedReward<Balance: BalanceT, Amount: Get<Balance>>(PhantomData<(Bal
 impl<Balance: BalanceT, Amount: Get<Balance>> RewardSize<Balance> for FixedReward<Balance, Amount> {
 	fn reward_size() -> Balance {
 		Balance::default().saturating_add(Amount::get())
+	}
+}
+
+pub struct FeeBasedCriteria<T, BaseWeight>(PhantomData<(T, BaseWeight)>)
+where
+	T: Config<ThresholdParameter = BalanceOf<T>> + pallet_transaction_payment::Config,
+	BaseWeight: Get<Weight>,
+	T::OnChargeTransaction: OnChargeTransaction<T, Balance = BalanceOf<T>>;
+
+impl<T, BaseWeight> RuntimeOrderCriteria for FeeBasedCriteria<T, BaseWeight>
+where
+	T: Config<ThresholdParameter = BalanceOf<T>> + pallet_transaction_payment::Config,
+	BaseWeight: Get<Weight>,
+	T::OnChargeTransaction: OnChargeTransaction<T, Balance = BalanceOf<T>>,
+{
+	fn should_place_order() -> bool {
+		let weight = frame_system::Pallet::<T>::block_weight();
+		let total_weight = weight.total();
+
+		let unadjusted_weight_fee =
+			pallet_transaction_payment::Pallet::<T>::weight_to_fee(total_weight);
+		let multiplier = pallet_transaction_payment::NextFeeMultiplier::<T>::get();
+		// final adjusted weight fee.
+		let adjusted_weight_fee = multiplier.saturating_mul_int(unadjusted_weight_fee);
+
+		let all_xt_len = frame_system::AllExtrinsicsLen::<T>::get().unwrap_or_default();
+		let len_fee = pallet_transaction_payment::Pallet::<T>::length_to_fee(all_xt_len);
+
+		let base_weight = pallet_transaction_payment::Pallet::<T>::weight_to_fee(BaseWeight::get());
+
+		let total_fees = base_weight.saturating_add(adjusted_weight_fee).saturating_add(len_fee);
+
+		total_fees >= ThresholdParameter::<T>::get()
 	}
 }
