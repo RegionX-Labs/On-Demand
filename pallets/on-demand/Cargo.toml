@@ -29,6 +29,9 @@ staging-xcm-builder = { workspace = true, default-features = false }
 polkadot-runtime-parachains = { workspace = true, default-features = false }
 polkadot-primitives = { workspace = true, default-features = false }
 
+# Cumulus
+cumulus-pallet-parachain-system = { workspace = true, default-features = false }
+
 # Local
 order-primitives = { workspace = true, default-features = false }
 
@@ -73,6 +76,7 @@ std = [
 	"cumulus-pallet-parachain-system/std",
 	"polkadot-runtime-parachains/std",
 	"polkadot-primitives/std",
+	"cumulus-pallet-parachain-system/std",
 	"staging-xcm-builder/std",
 ]
 try-runtime = [

@@ -49,6 +49,7 @@ pub mod pallet {
 	use super::*;
 	use crate::weights::WeightInfo;
 	use codec::MaxEncodedLen;
+	use cumulus_pallet_parachain_system::RelaychainStateProvider;
 	use frame_support::{
 		traits::{
 			fungible::{Inspect, Mutate},
@@ -116,6 +117,9 @@ pub mod pallet {
 
 		/// Implements logic to check whether an order should have been placed.
 		type OrderPlacementCriteria: RuntimeOrderCriteria;
+
+		/// Type for getting the current relay chain state.
+		type RelayChainStateProvider: RelaychainStateProvider;
 
 		#[cfg(feature = "runtime-benchmarks")]
 		type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
@@ -320,10 +324,10 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		fn order_placer() -> (Option<T::AuthorityId>, Weight) {
 			let slot_width = SlotWidth::<T>::get();
-			let para_height = frame_system::Pallet::<T>::block_number();
+			let relay_height = T::RelayChainStateProvider::current_relay_chain_state().number;
 			let authorities = Authorities::<T>::get();
 
-			let slot: u128 = (para_height >> slot_width).saturated_into();
+			let slot: u128 = (relay_height >> slot_width).saturated_into();
 			let indx = slot % authorities.len() as u128;
 
 			let authority_id = authorities.get(indx as usize).cloned();
