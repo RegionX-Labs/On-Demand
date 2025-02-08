@@ -197,7 +197,7 @@ where
 	let head_encoded = validation_data.clone().parent_head.0;
 	let para_head = <<Config::Block as BlockT>::Header>::decode(&mut &head_encoded[..])?;
 
-	let order_placer = Config::order_placer(parachain, r_hash, para_head)?.clone();
+	let order_placer = Config::order_placer(parachain, relay_height, para_head)?.clone();
 
 	if !keystore.has_keys(&[(order_placer.to_raw_vec(), sp_application_crypto::key_types::AURA)]) {
 		// Expected author is not in the keystore therefore we are not responsible for order
