@@ -14,6 +14,8 @@ use sp_runtime::{FixedPointNumber, SaturatedConversion, Saturating};
 
 pub use pallet::*;
 
+const LOG_TARGET: &str = "pallet-on-demand";
+
 type BalanceOf<T> =
 	<<T as pallet::Config>::Currency as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
@@ -48,8 +50,12 @@ pub trait RuntimeOrderCriteria {
 pub mod pallet {
 	use super::*;
 	use crate::weights::WeightInfo;
+	use alloc::{boxed::Box, vec::Vec};
 	use codec::MaxEncodedLen;
-	use cumulus_pallet_parachain_system::RelaychainStateProvider;
+	use cumulus_pallet_parachain_system::{
+		relay_state_snapshot::Error as RelayError, RelayChainStateProof,
+	};
+	use cumulus_primitives_core::relay_chain;
 	use frame_support::{
 		traits::{
 			fungible::{Inspect, Mutate},
@@ -58,14 +64,19 @@ pub mod pallet {
 		weights::Weight,
 		DefaultNoBound,
 	};
+	use frame_system::EventRecord;
+	use order_primitives::{well_known_keys::EVENTS, OrderInherentData};
+	use polkadot_runtime_parachains::on_demand;
 	use sp_runtime::{
 		traits::{AtLeast32BitUnsigned, Convert},
-		RuntimeAppPublic,
+		AccountId32, RuntimeAppPublic,
 	};
 
 	/// The module configuration trait.
 	#[pallet::config]
-	pub trait Config: frame_system::Config + pallet_aura::Config + pallet_session::Config {
+	pub trait Config:
+		frame_system::Config<AccountId = AccountId32> + pallet_aura::Config + pallet_session::Config
+	{
 		/// The overarching event type.
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -117,9 +128,6 @@ pub mod pallet {
 
 		/// Implements logic to check whether an order should have been placed.
 		type OrderPlacementCriteria: RuntimeOrderCriteria;
-
-		/// Type for getting the current relay chain state.
-		type RelayChainStateProvider: RelaychainStateProvider;
 
 		#[cfg(feature = "runtime-benchmarks")]
 		type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
@@ -209,6 +217,7 @@ pub mod pallet {
 		fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
 			let mut weight = Weight::zero();
 
+			/*
 			weight += T::DbWeight::get().reads(1);
 			if BulkMode::<T>::get().is_some() {
 				return weight;
@@ -252,6 +261,7 @@ pub mod pallet {
 
 			weight += <T as pallet::Config>::WeightInfo::on_reward();
 			T::OnReward::reward(T::ToAccountId::convert(order_placer_acc));
+			*/
 
 			weight
 		}
@@ -265,13 +275,111 @@ pub mod pallet {
 		}
 	}
 
+	#[pallet::inherent]
+	impl<T: Config> ProvideInherent for Pallet<T> {
+		type Call = Call<T>;
+		type Error = MakeFatalError<Error<T>>;
+
+		const INHERENT_IDENTIFIER: InherentIdentifier =
+			order_primitives::ON_DEMAND_INHERENT_IDENTIFIER;
+
+		fn create_inherent(data: &InherentData) -> Option<Self::Call> {
+			log::info!(
+				target: LOG_TARGET,
+				"Create inherent"
+			);
+
+			let data: OrderInherentData = data
+				.get_data(&Self::INHERENT_IDENTIFIER)
+				.ok()
+				.flatten()
+				.expect("there is not data to be posted; qed");
+
+			Some(Call::create_order { data })
+		}
+
+		fn is_inherent(call: &Self::Call) -> bool {
+			matches!(call, Call::create_order { .. })
+		}
+	}
+
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		#[pallet::call_index(0)]
+		#[pallet::weight((0, DispatchClass::Mandatory))]
+		pub fn create_order(
+			origin: OriginFor<T>,
+			data: OrderInherentData,
+		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
+
+			if BulkMode::<T>::get().is_some() {
+				return Ok(().into());
+			}
+			if Authorities::<T>::get().len().is_zero() {
+				return Ok(().into());
+			}
+
+			if !T::OrderPlacementCriteria::should_place_order() {
+				// Not supposed to place an order.
+				//
+				// Short-circuit: the order placer doesn't get rewarded.
+				return Ok(().into());
+			}
+
+			let relay_state_proof = RelayChainStateProof::new(
+				data.para_id,
+				data.relay_state_root,
+				data.relay_storage_proof,
+			)
+			.expect("Invalid relay chain state proof");
+
+			let events = relay_state_proof
+				.read_entry::<Vec<Box<EventRecord<rococo_runtime::RuntimeEvent, T::Hash>>>>(
+					EVENTS, None,
+				)
+				.map_err(|e| match e {
+					RelayError::ReadEntry(_) => Error::InvalidProof,
+					_ => Error::<T>::FailedProofReading,
+				})?;
+
+			let result: Vec<(u128, AccountId32)> = events
+				.into_iter()
+				.filter_map(|item| match item.event {
+					rococo_runtime::RuntimeEvent::OnDemandAssignmentProvider(
+						on_demand::Event::OnDemandOrderPlaced { para_id, spot_price, ordered_by },
+					) if para_id == data.para_id => Some((spot_price, ordered_by)),
+					_ => None,
+				})
+				.collect();
+
+			let Some(order_placer) = Self::order_placer_at(data.relay_height) else {
+				return Ok(().into());
+			};
+
+			let order_placer_acc = pallet_session::KeyOwner::<T>::get((
+				sp_application_crypto::key_types::AURA,
+				order_placer.to_raw_vec(),
+			))
+			.ok_or(Error::<T>::FailedToGetOrderPlacerAccount)?;
+
+			if !result.into_iter().any(|(_, ordered_by)| {
+				// In most implementations the validator id is same as account id.
+				<T as pallet_session::Config>::ValidatorIdOf::convert(ordered_by.clone()) ==
+					Some(order_placer_acc.clone())
+			}) {
+				return Ok(().into());
+			};
+
+			T::OnReward::reward(T::ToAccountId::convert(order_placer_acc));
+
+			Ok(().into())
+		}
 		/// Set the slot width for on-demand blocks.
 		///
 		/// - `origin`: Must be Root or pass `AdminOrigin`.
 		/// - `width`: The slot width in relay chain blocks.
-		#[pallet::call_index(0)]
+		#[pallet::call_index(1)]
 		#[pallet::weight(<T as pallet::Config>::WeightInfo::set_slot_width())]
 		pub fn set_slot_width(origin: OriginFor<T>, width: u32) -> DispatchResult {
 			T::AdminOrigin::ensure_origin_or_root(origin)?;
@@ -286,7 +394,7 @@ pub mod pallet {
 		///
 		/// - `origin`: Must be Root or pass `AdminOrigin`.
 		/// - `parameter`: The threshold parameter.
-		#[pallet::call_index(1)]
+		#[pallet::call_index(2)]
 		#[pallet::weight(<T as pallet::Config>::WeightInfo::set_threshold_parameter())]
 		pub fn set_threshold_parameter(
 			origin: OriginFor<T>,
@@ -304,7 +412,7 @@ pub mod pallet {
 		///
 		/// - `origin`: Must be Root or pass `AdminOrigin`.
 		/// - `bulk_mode`: Defines whether we want to switch to bulk mode.
-		#[pallet::call_index(2)]
+		#[pallet::call_index(3)]
 		#[pallet::weight(<T as pallet::Config>::WeightInfo::set_bulk_mode())]
 		pub fn set_bulk_mode(origin: OriginFor<T>, bulk_mode: bool) -> DispatchResult {
 			T::AdminOrigin::ensure_origin_or_root(origin)?;
@@ -322,18 +430,16 @@ pub mod pallet {
 	}
 
 	impl<T: Config> Pallet<T> {
-		fn order_placer() -> (Option<T::AuthorityId>, Weight) {
+		fn order_placer_at(relay_height: relay_chain::BlockNumber) -> Option<T::AuthorityId> {
 			let slot_width = SlotWidth::<T>::get();
-			let relay_height = T::RelayChainStateProvider::current_relay_chain_state().number;
 			let authorities = Authorities::<T>::get();
 
 			let slot: u128 = (relay_height >> slot_width).saturated_into();
 			let indx = slot % authorities.len() as u128;
 
 			let authority_id = authorities.get(indx as usize).cloned();
-			let weight = Weight::zero().saturating_add(T::DbWeight::get().reads(3));
 
-			(authority_id, weight)
+			authority_id
 		}
 	}
 

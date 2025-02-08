@@ -8909,6 +8909,7 @@ name = "pallet-on-demand"
 version = "0.1.0"
 dependencies = [
  "cumulus-pallet-parachain-system",
+ "cumulus-primitives-core",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -8921,6 +8922,7 @@ dependencies = [
  "parity-scale-codec",
  "polkadot-primitives",
  "polkadot-runtime-parachains",
+ "rococo-runtime",
  "scale-info",
  "sp-application-crypto",
  "sp-runtime",

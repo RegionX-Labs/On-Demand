@@ -2,9 +2,10 @@
 
 use crate::well_known_keys::EVENTS;
 use codec::{Codec, Decode, Encode, MaxEncodedLen};
-use cumulus_primitives_core::ParaId;
+use cumulus_primitives_core::{relay_chain::BlockNumber as RelayBlockNumber, ParaId};
 use frame_support::{pallet_prelude::InherentIdentifier, Parameter};
 use scale_info::TypeInfo;
+use sp_core::H256;
 use sp_runtime::traits::{MaybeDisplay, MaybeSerializeDeserialize, Member};
 
 #[cfg(feature = "std")]
@@ -17,7 +18,17 @@ pub const ON_DEMAND_INHERENT_IDENTIFIER: InherentIdentifier = *b"orderiht";
 #[derive(Encode, Decode, sp_core::RuntimeDebug, Clone, PartialEq, TypeInfo)]
 pub struct OrderInherentData {
 	pub relay_storage_proof: sp_trie::StorageProof,
+	pub relay_state_root: H256,
+	pub relay_height: RelayBlockNumber,
 	pub para_id: ParaId,
+}
+
+#[derive(Encode, Decode, sp_core::RuntimeDebug, Clone, PartialEq, TypeInfo)]
+pub struct OrderRecord {
+	/// The state root of the block in which the order was successfully placed.
+	pub relay_state_root: Option<H256>,
+	/// The associated relay chain height.
+	pub relay_height: RelayBlockNumber,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Clone)]

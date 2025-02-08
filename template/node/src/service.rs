@@ -33,7 +33,8 @@ use cumulus_relay_chain_interface::{BlockNumber, OverseerHandle, RelayChainInter
 // Substrate Imports
 use codec::Encode;
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
-use order_primitives::OnDemandRuntimeApi;
+use futures::lock::Mutex;
+use order_primitives::{OnDemandRuntimeApi, OrderRecord};
 use order_service::{
 	config::{OnDemandSlot, OrderCriteria},
 	start_on_demand,
@@ -271,8 +272,26 @@ fn start_consensus(
 		client.clone(),
 	);
 
+	let relay_chain_interface_clone = relay_chain_interface.clone();
 	let params = AuraParams {
-		create_inherent_data_providers: move |_, ()| async move { Ok(()) },
+		create_inherent_data_providers: move |_, ()| {
+			let relay_chain_interface = relay_chain_interface_clone.clone();
+			async move {
+				let order_inherent = order_primitives::OrderInherentData::create_at(
+					&relay_chain_interface,
+					para_id,
+				)
+				.await;
+
+				let order_inherent = order_inherent.ok_or_else(|| {
+					Box::<dyn std::error::Error + Send + Sync>::from(
+						"Failed to create order inherent",
+					)
+				})?;
+
+				Ok(order_inherent)
+			}
+		},
 		block_import,
 		para_client: client.clone(),
 		para_backend: backend,
@@ -461,6 +480,9 @@ pub async fn start_parachain_node(
 	})?;
 
 	if validator {
+		// Keep the order record in memory.
+		let order_record =
+			Arc::new(Mutex::new(OrderRecord { relay_height: 0, relay_state_root: None }));
 		start_on_demand::<OnDemandConfig>(
 			client.clone(),
 			para_id,
@@ -469,6 +491,7 @@ pub async fn start_parachain_node(
 			&task_manager,
 			params.keystore_container.keystore(),
 			relay_rpc,
+			order_record,
 		)?;
 		start_consensus(
 			client.clone(),

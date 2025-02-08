@@ -11,13 +11,16 @@ use cumulus_primitives_core::{
 	relay_chain::BlockNumber as RelayBlockNumber, ParaId, PersistedValidationData,
 };
 use cumulus_relay_chain_interface::{RelayChainInterface, RelayChainResult};
-use futures::{pin_mut, select, FutureExt, Stream, StreamExt};
-use order_primitives::{well_known_keys::ON_DEMAND_QUEUE, EnqueuedOrder};
+use futures::{lock::Mutex, pin_mut, select, FutureExt, Stream, StreamExt};
+use order_primitives::{well_known_keys::ON_DEMAND_QUEUE, EnqueuedOrder, OrderRecord};
 use polkadot_primitives::OccupiedCoreAssumption;
 use sc_service::TaskManager;
 use sp_core::H256;
 use sp_keystore::KeystorePtr;
-use sp_runtime::{traits::Block as BlockT, RuntimeAppPublic};
+use sp_runtime::{
+	traits::{Block as BlockT, Header},
+	RuntimeAppPublic,
+};
 use std::{error::Error, net::SocketAddr, sync::Arc};
 
 mod chain;
@@ -34,6 +37,7 @@ pub fn start_on_demand<Config>(
 	task_manager: &TaskManager,
 	keystore: KeystorePtr,
 	relay_rpc: Option<SocketAddr>,
+	order_record: Arc<Mutex<OrderRecord>>,
 ) -> sc_service::error::Result<()>
 where
 	Config: OnDemandConfig + 'static,
@@ -54,6 +58,7 @@ where
 		keystore,
 		transaction_pool,
 		url,
+		order_record,
 	);
 
 	task_manager.spawn_essential_handle().spawn_blocking(
@@ -72,6 +77,7 @@ async fn run_on_demand_task<Config>(
 	keystore: KeystorePtr,
 	transaction_pool: Arc<Config::ExPool>,
 	relay_url: String,
+	order_record: Arc<Mutex<OrderRecord>>,
 ) where
 	Config: OnDemandConfig + 'static,
 	Config::OrderPlacementCriteria:
@@ -89,6 +95,7 @@ async fn run_on_demand_task<Config>(
 		keystore,
 		transaction_pool,
 		relay_url,
+		order_record,
 	);
 
 	select! {
@@ -103,6 +110,7 @@ async fn follow_relay_chain<Config>(
 	keystore: KeystorePtr,
 	transaction_pool: Arc<Config::ExPool>,
 	relay_url: String,
+	order_record: Arc<Mutex<OrderRecord>>,
 ) where
 	Config: OnDemandConfig + 'static,
 	Config::OrderPlacementCriteria:
@@ -125,7 +133,7 @@ async fn follow_relay_chain<Config>(
 		select! {
 			h = new_best_heads.next() => {
 				match h {
-					Some((height, validation_data, r_hash)) => {
+					Some((height, validation_data, r_hash, r_state_root)) => {
 						log::info!(
 							target: LOG_TARGET,
 							"New best relay head: {}",
@@ -135,6 +143,7 @@ async fn follow_relay_chain<Config>(
 						let _ = handle_relaychain_stream::<Config>(
 							validation_data,
 							height,
+							r_state_root,
 							&*parachain,
 							keystore.clone(),
 							transaction_pool.clone(),
@@ -142,6 +151,7 @@ async fn follow_relay_chain<Config>(
 							r_hash,
 							para_id,
 							relay_url.clone(),
+							order_record.clone(),
 						).await;
 					},
 					None => {
@@ -157,6 +167,7 @@ async fn follow_relay_chain<Config>(
 async fn handle_relaychain_stream<Config>(
 	validation_data: PersistedValidationData,
 	relay_height: RelayBlockNumber,
+	relay_state_root: H256,
 	parachain: &Config::P,
 	keystore: KeystorePtr,
 	transaction_pool: Arc<Config::ExPool>,
@@ -164,6 +175,7 @@ async fn handle_relaychain_stream<Config>(
 	r_hash: H256,
 	para_id: ParaId,
 	relay_url: String,
+	order_record: Arc<Mutex<OrderRecord>>,
 ) -> Result<(), Box<dyn Error>>
 where
 	Config: OnDemandConfig + 'static,
@@ -247,19 +259,23 @@ where
 
 	chain::submit_order(&relay_url, para_id, spot_price.into(), keystore).await?;
 
+	let mut record = order_record.lock().await;
+	record.relay_height = relay_height;
+	record.relay_state_root = Some(relay_state_root);
+
 	Ok(())
 }
 
 async fn new_best_heads(
 	relay_chain: impl RelayChainInterface + Clone,
 	para_id: ParaId,
-) -> RelayChainResult<impl Stream<Item = (u32, PersistedValidationData, H256)>> {
+) -> RelayChainResult<impl Stream<Item = (u32, PersistedValidationData, H256, H256)>> {
 	let new_best_notification_stream =
 		relay_chain.new_best_notification_stream().await?.filter_map(move |n| {
 			let relay_chain = relay_chain.clone();
 			async move {
 				let data = validation_data(relay_chain, n.hash(), para_id).await?;
-				Some((n.number, data, n.hash()))
+				Some((n.number, data, n.hash(), n.state_root().clone()))
 			}
 		});
 

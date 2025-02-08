@@ -1,6 +1,7 @@
 use crate::{OrderInherentData, EVENTS, ON_DEMAND_INHERENT_IDENTIFIER};
 use cumulus_primitives_core::{relay_chain::BlockId, ParaId};
 use cumulus_relay_chain_interface::{PHash, RelayChainInterface};
+use sp_runtime::traits::Header;
 
 const LOG_TARGET: &str = "order-inherent";
 
@@ -42,7 +43,12 @@ impl OrderInherentData {
 			"Submitting inherent data"
 		);
 
-		Some(OrderInherentData { relay_storage_proof: relay_storage_proof.clone(), para_id })
+		Some(OrderInherentData {
+			relay_storage_proof: relay_storage_proof.clone(),
+			para_id,
+			relay_state_root: *header.state_root(),
+			relay_height: *header.number(),
+		})
 	}
 }
 
