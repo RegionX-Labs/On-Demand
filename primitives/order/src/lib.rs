@@ -17,6 +17,11 @@ pub const ON_DEMAND_INHERENT_IDENTIFIER: InherentIdentifier = *b"orderiht";
 
 #[derive(Encode, Decode, sp_core::RuntimeDebug, Clone, PartialEq, TypeInfo)]
 pub struct OrderInherentData {
+	pub data: Option<InherentData>,
+}
+
+#[derive(Encode, Decode, sp_core::RuntimeDebug, Clone, PartialEq, TypeInfo)]
+pub struct InherentData {
 	pub relay_storage_proof: sp_trie::StorageProof,
 	pub relay_state_root: H256,
 	pub relay_height: RelayBlockNumber,
@@ -25,10 +30,8 @@ pub struct OrderInherentData {
 
 #[derive(Encode, Decode, sp_core::RuntimeDebug, Clone, PartialEq, TypeInfo)]
 pub struct OrderRecord {
-	/// The state root of the block in which the order was successfully placed.
-	pub relay_state_root: Option<H256>,
-	/// The associated relay chain height.
-	pub relay_height: RelayBlockNumber,
+	/// The hash of the block in which the order was placed.
+	pub relay_block_hash: Option<H256>,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Clone)]

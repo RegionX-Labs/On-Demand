@@ -1,6 +1,7 @@
-use crate::{OrderInherentData, EVENTS, ON_DEMAND_INHERENT_IDENTIFIER};
+use crate::{InherentData, OrderInherentData, EVENTS, ON_DEMAND_INHERENT_IDENTIFIER};
 use cumulus_primitives_core::{relay_chain::BlockId, ParaId};
 use cumulus_relay_chain_interface::{PHash, RelayChainInterface};
+use sp_core::H256;
 use sp_runtime::traits::Header;
 
 const LOG_TARGET: &str = "order-inherent";
@@ -8,28 +9,27 @@ const LOG_TARGET: &str = "order-inherent";
 impl OrderInherentData {
 	pub async fn create_at(
 		relay_chain_interface: &impl RelayChainInterface,
+		relay_block_hash: Option<H256>,
 		para_id: ParaId,
-	) -> Option<Self> {
-		let best_hash = relay_chain_interface
-			.best_block_hash()
-			.await
-			.map_err(|e| {
-				log::error!(
-					target: LOG_TARGET,
-					"Failed to get best relay chain block hash. Error: {:?}",
-					e
-				);
-			})
-			.ok()?;
+	) -> Option<Self> {	
+		log::info!(
+			target: LOG_TARGET,
+			"relay_block_hash: {:?}",
+			relay_block_hash,
+		);
+
+		let Some(hash) = relay_block_hash else {
+			return Some(OrderInherentData { data: None });
+		};
 
 		let header = relay_chain_interface
-			.header(BlockId::Hash(best_hash))
+			.header(BlockId::Hash(hash))
 			.await
 			.map_err(|e| {
 				log::error!(
 					target: LOG_TARGET,
 					"Failed to fetch relay chain header: {}, Error: {:?}",
-					best_hash,
+					hash,
 					e
 				);
 			})
@@ -43,12 +43,16 @@ impl OrderInherentData {
 			"Submitting inherent data"
 		);
 
-		Some(OrderInherentData {
-			relay_storage_proof: relay_storage_proof.clone(),
-			para_id,
-			relay_state_root: *header.state_root(),
-			relay_height: *header.number(),
-		})
+		Some(
+			OrderInherentData {
+				data: Some(InherentData {
+					relay_storage_proof: relay_storage_proof.clone(),
+					para_id,
+					relay_state_root: *header.state_root(),
+					relay_height: *header.number(),
+				}),
+			},
+		)
 	}
 }
 

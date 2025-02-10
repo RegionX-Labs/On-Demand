@@ -22,6 +22,7 @@ use sp_runtime::{
 	RuntimeAppPublic,
 };
 use std::{error::Error, net::SocketAddr, sync::Arc};
+use subxt::{OnlineClient, PolkadotConfig};
 
 mod chain;
 pub mod config;
@@ -98,10 +99,56 @@ async fn run_on_demand_task<Config>(
 		order_record,
 	);
 
+	// let event_notification = event_notification(para_id, relay_url.clone(),
+	// order_record.clone());
 	select! {
 		_ = relay_chain_notification.fuse() => {},
+		// _ = event_notification.fuse() => {},
 	}
 }
+/*
+
+async fn event_notification(para_id: ParaId, url: String, order_record: Arc<Mutex<OrderRecord>>) {
+	loop {
+		let _ = ondemand_event_task(para_id, url.clone(), order_record.clone()).await;
+	}
+}
+
+pub async fn ondemand_event_task(
+	para_id: ParaId,
+	relay_url: String,
+	order_record: Arc<Mutex<OrderRecord>>,
+) -> Result<(), Box<dyn Error>> {
+	// Get the latest block of the relaychain through subxt.
+
+	let api = OnlineClient::<PolkadotConfig>::from_url(relay_url).await?;
+
+	let mut blocks_sub = api.blocks().subscribe_best().await?;
+
+	// Track `OnDemandOrderPlaced` events.
+	while let Some(block) = blocks_sub.next().await {
+		let block = block?;
+
+		let events = block.events().await?;
+		for event in events.iter() {
+			let event = event?;
+
+			let ev_order_placed = event.as_event::<metadata::OnDemandOrderPlaced>();
+			if let Ok(order_placed_event) = ev_order_placed {
+				if let Some(e) = order_placed_event {
+					let exp_id: u32 = para_id.into();
+					if e.para_id.0 == exp_id {
+						let mut record = order_record.lock().await;
+						record.relay_height = block.number();
+						record.relay_state_root = Some(relay_state_root);
+					}
+				}
+			}
+		}
+	}
+	Ok(())
+}
+*/
 
 async fn follow_relay_chain<Config>(
 	para_id: ParaId,
@@ -206,6 +253,26 @@ where
 		return Ok(());
 	}
 
+	let on_demand_queue_storage = relay_chain.get_storage_by_key(r_hash, ON_DEMAND_QUEUE).await?;
+	let on_demand_queue = on_demand_queue_storage
+		.map(|raw| <Vec<EnqueuedOrder>>::decode(&mut &raw[..]))
+		.transpose()?;
+
+	let order_exists = if let Some(queue) = on_demand_queue {
+		queue.into_iter().position(|e| e.para_id == para_id).is_some()
+	} else {
+		false
+	};
+
+	let order_record_clone = order_record.clone();
+
+	if order_exists {
+		let mut record = order_record_clone.lock().await;
+		record.relay_block_hash = Some(r_hash);
+
+		return Ok(());
+	}
+
 	let head_encoded = validation_data.clone().parent_head.0;
 	let para_head = <<Config::Block as BlockT>::Header>::decode(&mut &head_encoded[..])?;
 
@@ -219,21 +286,6 @@ where
 			"Waiting for {} to create an order",
 			order_placer
 		);
-		return Ok(());
-	}
-
-	let on_demand_queue_storage = relay_chain.get_storage_by_key(r_hash, ON_DEMAND_QUEUE).await?;
-	let on_demand_queue = on_demand_queue_storage
-		.map(|raw| <Vec<EnqueuedOrder>>::decode(&mut &raw[..]))
-		.transpose()?;
-
-	let order_exists = if let Some(queue) = on_demand_queue {
-		queue.into_iter().position(|e| e.para_id == para_id).is_some()
-	} else {
-		false
-	};
-
-	if order_exists {
 		return Ok(());
 	}
 
@@ -259,9 +311,8 @@ where
 
 	chain::submit_order(&relay_url, para_id, spot_price.into(), keystore).await?;
 
-	let mut record = order_record.lock().await;
-	record.relay_height = relay_height;
-	record.relay_state_root = Some(relay_state_root);
+	let mut record = order_record_clone.lock().await;
+	record.relay_block_hash = Some(r_hash);
 
 	Ok(())
 }

@@ -61,7 +61,6 @@ pub mod pallet {
 			fungible::{Inspect, Mutate},
 			tokens::Balance,
 		},
-		weights::Weight,
 		DefaultNoBound,
 	};
 	use frame_system::EventRecord;
@@ -121,7 +120,7 @@ pub mod pallet {
 		>;
 
 		/// Reward size for order placers.
-		type RewardSize: RewardSize<<Self::Currency as Inspect<Self::AccountId>>::Balance>;
+		type RewardSize: RewardSize<BalanceOf<Self>>;
 
 		/// Type converting `Self::ValidatorId` to `Self::AccountId`.
 		type ToAccountId: Convert<Self::ValidatorId, Self::AccountId>;
@@ -161,10 +160,17 @@ pub mod pallet {
 	#[pallet::getter(fn threshold_parameter)]
 	pub type ThresholdParameter<T: Config> = StorageValue<_, T::ThresholdParameter, ValueQuery>;
 
-	/// When in bulk mode we skip the `on_initialize` logic of this pallet
+	/// When in bulk mode we skip the `on_initialize` logic of this pallet.
 	#[pallet::storage]
 	#[pallet::getter(fn bulk_mode)]
 	pub type BulkMode<T: Config> = StorageValue<_, (), OptionQuery>;
+
+	/// Previous slot in which an order was placed.
+	///
+	/// This is tracked to prevent rewarding a collator multiple times for the same slot.
+	#[pallet::storage]
+	#[pallet::getter(fn previous_slot)]
+	pub type PreviousSlot<T: Config> = StorageValue<_, u128, ValueQuery>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -174,7 +180,7 @@ pub mod pallet {
 		/// Threshold parameter set.
 		ThresholdParameterSet { parameter: T::ThresholdParameter },
 		/// We rewarded the order placer.
-		OrderPlacerRewarded { order_placer: T::AccountId },
+		OrderPlacerRewarded { order_placer: T::AccountId, reward: BalanceOf<T> },
 		/// Bulk mode set.
 		BulkModeSet { bulk_mode: bool },
 	}
@@ -214,58 +220,6 @@ pub mod pallet {
 	// NOTE: always place pallet-on-demand after the aura pallet.
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
-			let mut weight = Weight::zero();
-
-			/*
-			weight += T::DbWeight::get().reads(1);
-			if BulkMode::<T>::get().is_some() {
-				return weight;
-			}
-
-			weight += T::DbWeight::get().reads(1);
-			if Authorities::<T>::get().len().is_zero() {
-				return weight;
-			}
-
-			if !T::OrderPlacementCriteria::should_place_order() {
-				// Short-circuit: the order placer doesn't get rewarded.
-				return weight
-					.saturating_add(<T as pallet::Config>::WeightInfo::should_place_order());
-			}
-
-			let (maybe_order_placer, _weight) = Self::order_placer();
-			weight += _weight;
-
-			let Some(order_placer) = maybe_order_placer else {
-				return weight;
-			};
-
-			weight += T::DbWeight::get().reads(1);
-			let Some(order_placer_acc) = pallet_session::KeyOwner::<T>::get((
-				sp_application_crypto::key_types::AURA,
-				order_placer.to_raw_vec(),
-			)) else {
-				return weight;
-			};
-
-			// NOTE: Game theoretically we don't have to check who created the order...
-			// Only the supposed creator has the benefit to do so...
-
-			// The block in which the order is placed and the block in which the order gets
-			// finalized are not the same block..
-
-			// There are two solutions:
-			// 1. Rely purely on game theory
-			// 2. Provide the relay parent in which the order was placed.
-
-			weight += <T as pallet::Config>::WeightInfo::on_reward();
-			T::OnReward::reward(T::ToAccountId::convert(order_placer_acc));
-			*/
-
-			weight
-		}
-
 		fn on_finalize(_: BlockNumberFor<T>) {
 			// Update to the latest AuRa authorities.
 			//
@@ -312,6 +266,9 @@ pub mod pallet {
 			data: OrderInherentData,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
+			let Some(data) = data.data else {
+				return Ok(().into());
+			};
 
 			if BulkMode::<T>::get().is_some() {
 				return Ok(().into());
@@ -325,6 +282,13 @@ pub mod pallet {
 				//
 				// Short-circuit: the order placer doesn't get rewarded.
 				return Ok(().into());
+			}
+
+			let slot = Self::slot_at(data.relay_height);
+			if slot <= PreviousSlot::<T>::get() {
+				// The order placer doesn't get rewarded multiple times for blocks produced in the
+				// same slot.
+				return Ok(().into())
 			}
 
 			let relay_state_proof = RelayChainStateProof::new(
@@ -372,11 +336,13 @@ pub mod pallet {
 			};
 
 			T::OnReward::reward(T::ToAccountId::convert(order_placer_acc));
+			PreviousSlot::<T>::set(slot);
 
 			Ok(().into())
 		}
 		/// Set the slot width for on-demand blocks.
 		///
+		/// Parameters:
 		/// - `origin`: Must be Root or pass `AdminOrigin`.
 		/// - `width`: The slot width in relay chain blocks.
 		#[pallet::call_index(1)]
@@ -392,6 +358,7 @@ pub mod pallet {
 
 		/// Set the threshold parameter.
 		///
+		/// Parameters:
 		/// - `origin`: Must be Root or pass `AdminOrigin`.
 		/// - `parameter`: The threshold parameter.
 		#[pallet::call_index(2)]
@@ -410,6 +377,7 @@ pub mod pallet {
 
 		/// Set the threshold parameter.
 		///
+		/// Parameters:
 		/// - `origin`: Must be Root or pass `AdminOrigin`.
 		/// - `bulk_mode`: Defines whether we want to switch to bulk mode.
 		#[pallet::call_index(3)]
@@ -431,15 +399,20 @@ pub mod pallet {
 
 	impl<T: Config> Pallet<T> {
 		fn order_placer_at(relay_height: relay_chain::BlockNumber) -> Option<T::AuthorityId> {
-			let slot_width = SlotWidth::<T>::get();
 			let authorities = Authorities::<T>::get();
 
-			let slot: u128 = (relay_height >> slot_width).saturated_into();
+			let slot = Self::slot_at(relay_height);
 			let indx = slot % authorities.len() as u128;
 
 			let authority_id = authorities.get(indx as usize).cloned();
 
 			authority_id
+		}
+
+		fn slot_at(relay_height: relay_chain::BlockNumber) -> u128 {
+			let slot_width = SlotWidth::<T>::get();
+			let slot: u128 = (relay_height >> slot_width).saturated_into();
+			slot
 		}
 	}
 
@@ -452,7 +425,10 @@ pub mod pallet {
 			if T::Currency::mint_into(&rewardee, reward_size).is_err() {
 				return;
 			};
-			Self::deposit_event(Event::OrderPlacerRewarded { order_placer: rewardee });
+			Self::deposit_event(Event::OrderPlacerRewarded {
+				order_placer: rewardee,
+				reward: reward_size,
+			});
 		}
 	}
 }
