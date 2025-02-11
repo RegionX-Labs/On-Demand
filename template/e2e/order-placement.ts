@@ -81,7 +81,7 @@ async function orderPlacementWorks() {
               assert(events, "Failed to get events");
 
               const e = (events as Array<EventRecord>).find(record => record.event.method === 'OrderPlacerRewarded');
-              e && console.log(`Order placer rewarded: ${e.event.data}`);
+              e && console.log(`Order placer rewarded: ${e.event.data[0].toString()}`);
 
               unsubscribe();
             });
