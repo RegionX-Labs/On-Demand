@@ -3,7 +3,10 @@
 //! NOTE: Inspiration was taken from the Magnet(https://github.com/Magport/Magnet) on-demand integration.
 
 use crate::{
-	chain::{get_spot_price, is_parathread, on_demand_cores_available},
+	chain::{
+		get_spot_price, is_parathread, on_demand_cores_available,
+		polkadot::on_demand_assignment_provider::events::OnDemandOrderPlaced,
+	},
 	config::{OnDemandConfig, OrderCriteria},
 };
 use codec::Decode;
@@ -95,18 +98,17 @@ async fn run_on_demand_task<Config>(
 		relay_chain,
 		keystore,
 		transaction_pool,
-		relay_url,
-		order_record,
+		relay_url.clone(),
+		order_record.clone(),
 	);
 
-	// let event_notification = event_notification(para_id, relay_url.clone(),
-	// order_record.clone());
+	let event_notification = event_notification(para_id, relay_url, order_record);
+
 	select! {
 		_ = relay_chain_notification.fuse() => {},
-		// _ = event_notification.fuse() => {},
+		_ = event_notification.fuse() => {},
 	}
 }
-/*
 
 async fn event_notification(para_id: ParaId, url: String, order_record: Arc<Mutex<OrderRecord>>) {
 	loop {
@@ -133,14 +135,18 @@ pub async fn ondemand_event_task(
 		for event in events.iter() {
 			let event = event?;
 
-			let ev_order_placed = event.as_event::<metadata::OnDemandOrderPlaced>();
+			let ev_order_placed = event.as_event::<OnDemandOrderPlaced>();
 			if let Ok(order_placed_event) = ev_order_placed {
 				if let Some(e) = order_placed_event {
 					let exp_id: u32 = para_id.into();
 					if e.para_id.0 == exp_id {
+						log::info!(
+							target: LOG_TARGET,
+							"📦 OnDemandOrderPlaced event: {:?}",
+							e.spot_price
+						);
 						let mut record = order_record.lock().await;
-						record.relay_height = block.number();
-						record.relay_state_root = Some(relay_state_root);
+						record.relay_block_hash = Some(block.hash());
 					}
 				}
 			}
@@ -148,7 +154,6 @@ pub async fn ondemand_event_task(
 	}
 	Ok(())
 }
-*/
 
 async fn follow_relay_chain<Config>(
 	para_id: ParaId,
@@ -267,8 +272,10 @@ where
 	let order_record_clone = order_record.clone();
 
 	if order_exists {
-		let mut record = order_record_clone.lock().await;
-		record.relay_block_hash = Some(r_hash);
+		log::info!(
+			target: LOG_TARGET,
+			"Order in queue ⏳"
+		);
 
 		return Ok(());
 	}

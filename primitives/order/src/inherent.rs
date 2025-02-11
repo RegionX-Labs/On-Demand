@@ -11,7 +11,7 @@ impl OrderInherentData {
 		relay_chain_interface: &impl RelayChainInterface,
 		relay_block_hash: Option<H256>,
 		para_id: ParaId,
-	) -> Option<Self> {	
+	) -> Option<Self> {
 		log::info!(
 			target: LOG_TARGET,
 			"relay_block_hash: {:?}",
@@ -43,16 +43,14 @@ impl OrderInherentData {
 			"Submitting inherent data"
 		);
 
-		Some(
-			OrderInherentData {
-				data: Some(InherentData {
-					relay_storage_proof: relay_storage_proof.clone(),
-					para_id,
-					relay_state_root: *header.state_root(),
-					relay_height: *header.number(),
-				}),
-			},
-		)
+		Some(OrderInherentData {
+			data: Some(InherentData {
+				relay_storage_proof: relay_storage_proof.clone(),
+				para_id,
+				relay_state_root: *header.state_root(),
+				relay_height: *header.number(),
+			}),
+		})
 	}
 }
 

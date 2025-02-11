@@ -485,8 +485,7 @@ pub async fn start_parachain_node(
 
 	if validator {
 		// Keep the order record in memory.
-		let order_record =
-			Arc::new(Mutex::new(OrderRecord { relay_block_hash: None }));
+		let order_record = Arc::new(Mutex::new(OrderRecord { relay_block_hash: None }));
 		start_on_demand::<OnDemandConfig>(
 			client.clone(),
 			para_id,
