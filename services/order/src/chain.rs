@@ -1,7 +1,7 @@
 //! This file contains all the chain related interaction functions.
 
 use crate::chain::polkadot::{
-	on_demand_assignment_provider::storage::types::queue_status::QueueStatus,
+	on_demand::storage::types::queue_status::QueueStatus,
 	runtime_types::{
 		pallet_broker::coretime_interface::CoreAssignment,
 		polkadot_parachain_primitives::primitives::Id,
@@ -101,7 +101,7 @@ pub async fn submit_order(
 	let client = OnlineClient::<PolkadotConfig>::from_url(url).await?;
 
 	let place_order = polkadot::tx()
-		.on_demand_assignment_provider()
+		.on_demand()
 		.place_order_allow_death(max_amount, Id(para_id.into()));
 
 	let signer_keystore = SignerKeystore::<PolkadotConfig>::new(keystore.clone());

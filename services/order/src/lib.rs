@@ -5,7 +5,7 @@
 use crate::{
 	chain::{
 		get_spot_price, is_parathread, on_demand_cores_available,
-		polkadot::on_demand_assignment_provider::events::OnDemandOrderPlaced,
+		polkadot::on_demand::events::OnDemandOrderPlaced,
 	},
 	config::{OnDemandConfig, OrderCriteria},
 };
@@ -20,10 +20,7 @@ use polkadot_primitives::OccupiedCoreAssumption;
 use sc_service::TaskManager;
 use sp_core::H256;
 use sp_keystore::KeystorePtr;
-use sp_runtime::{
-	traits::{Block as BlockT, Header},
-	RuntimeAppPublic,
-};
+use sp_runtime::{traits::Block as BlockT, RuntimeAppPublic};
 use std::{error::Error, net::SocketAddr, sync::Arc};
 use subxt::{OnlineClient, PolkadotConfig};
 
@@ -185,7 +182,7 @@ async fn follow_relay_chain<Config>(
 		select! {
 			h = new_best_heads.next() => {
 				match h {
-					Some((height, validation_data, r_hash, r_state_root)) => {
+					Some((height, validation_data, r_hash)) => {
 						log::info!(
 							target: LOG_TARGET,
 							"New best relay head: {}",
@@ -195,7 +192,6 @@ async fn follow_relay_chain<Config>(
 						let _ = handle_relaychain_stream::<Config>(
 							validation_data,
 							height,
-							r_state_root,
 							&*parachain,
 							keystore.clone(),
 							transaction_pool.clone(),
@@ -219,7 +215,6 @@ async fn follow_relay_chain<Config>(
 async fn handle_relaychain_stream<Config>(
 	validation_data: PersistedValidationData,
 	relay_height: RelayBlockNumber,
-	relay_state_root: H256,
 	parachain: &Config::P,
 	keystore: KeystorePtr,
 	transaction_pool: Arc<Config::ExPool>,
@@ -327,13 +322,13 @@ where
 async fn new_best_heads(
 	relay_chain: impl RelayChainInterface + Clone,
 	para_id: ParaId,
-) -> RelayChainResult<impl Stream<Item = (u32, PersistedValidationData, H256, H256)>> {
+) -> RelayChainResult<impl Stream<Item = (u32, PersistedValidationData, H256)>> {
 	let new_best_notification_stream =
 		relay_chain.new_best_notification_stream().await?.filter_map(move |n| {
 			let relay_chain = relay_chain.clone();
 			async move {
 				let data = validation_data(relay_chain, n.hash(), para_id).await?;
-				Some((n.number, data, n.hash(), n.state_root().clone()))
+				Some((n.number, data, n.hash()))
 			}
 		});
 
