@@ -12,12 +12,6 @@ impl OrderInherentData {
 		relay_block_hash: Option<H256>,
 		para_id: ParaId,
 	) -> Option<Self> {
-		log::info!(
-			target: LOG_TARGET,
-			"relay_block_hash: {:?}",
-			relay_block_hash,
-		);
-
 		let Some(hash) = relay_block_hash else {
 			return Some(OrderInherentData { data: None });
 		};

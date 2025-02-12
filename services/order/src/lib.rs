@@ -5,7 +5,7 @@
 use crate::{
 	chain::{
 		affinity_entries, get_spot_price, is_parathread, on_demand_cores_available,
-		polkadot::on_demand::events::OnDemandOrderPlaced,
+		polkadot::on_demand_assignment_provider::events::OnDemandOrderPlaced,
 	},
 	config::{OnDemandConfig, OrderCriteria},
 };
@@ -139,7 +139,7 @@ pub async fn ondemand_event_task(
 					if e.para_id.0 == exp_id {
 						log::info!(
 							target: LOG_TARGET,
-							"📦 OnDemandOrderPlaced event: {:?}",
+							"📦 OnDemandOrderPlaced event; spot price: {:?}",
 							e.spot_price
 						);
 						let mut record = order_record.lock().await;
