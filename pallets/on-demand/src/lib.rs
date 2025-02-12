@@ -375,7 +375,7 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Set the threshold parameter.
+		/// Set the bulk mode.
 		///
 		/// Parameters:
 		/// - `origin`: Must be Root or pass `AdminOrigin`.
