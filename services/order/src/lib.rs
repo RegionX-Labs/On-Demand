@@ -4,7 +4,7 @@
 
 use crate::{
 	chain::{
-		get_spot_price, is_parathread, on_demand_cores_available,
+		affinity_entries, get_spot_price, is_parathread, on_demand_cores_available,
 		polkadot::on_demand::events::OnDemandOrderPlaced,
 	},
 	config::{OnDemandConfig, OrderCriteria},
@@ -15,7 +15,7 @@ use cumulus_primitives_core::{
 };
 use cumulus_relay_chain_interface::{RelayChainInterface, RelayChainResult};
 use futures::{lock::Mutex, pin_mut, select, FutureExt, Stream, StreamExt};
-use order_primitives::{well_known_keys::ON_DEMAND_QUEUE, EnqueuedOrder, OrderRecord};
+use order_primitives::{well_known_keys::FREE_ENTRIES, EnqueuedOrder, OrderRecord};
 use polkadot_primitives::OccupiedCoreAssumption;
 use sc_service::TaskManager;
 use sp_core::H256;
@@ -253,18 +253,23 @@ where
 		return Ok(());
 	}
 
-	let on_demand_queue_storage = relay_chain.get_storage_by_key(r_hash, ON_DEMAND_QUEUE).await?;
-	let on_demand_queue = on_demand_queue_storage
+	let free_entries_storage = relay_chain.get_storage_by_key(r_hash, FREE_ENTRIES).await?;
+	let free_entries = free_entries_storage
 		.map(|raw| <Vec<EnqueuedOrder>>::decode(&mut &raw[..]))
 		.transpose()?;
 
-	let order_exists = if let Some(queue) = on_demand_queue {
-		queue.into_iter().position(|e| e.para_id == para_id).is_some()
+	let affinity = affinity_entries(&relay_chain, r_hash)
+		.await
+		.ok_or("Failed to get affinity entries")?;
+
+	let exists_in_affinity = affinity.into_iter().position(|e| e.para_id == para_id).is_some();
+	let exists_in_free = if let Some(entries) = free_entries {
+		entries.into_iter().position(|e| e.para_id == para_id).is_some()
 	} else {
 		false
 	};
 
-	let order_record_clone = order_record.clone();
+	let order_exists = exists_in_affinity || exists_in_free;
 
 	if order_exists {
 		log::info!(
@@ -313,6 +318,7 @@ where
 
 	chain::submit_order(&relay_url, para_id, spot_price.into(), keystore).await?;
 
+	let order_record_clone = order_record.clone();
 	let mut record = order_record_clone.lock().await;
 	record.relay_block_hash = Some(r_hash);
 

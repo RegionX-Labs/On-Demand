@@ -3,13 +3,16 @@ use cumulus_primitives_core::{relay_chain::CoreIndex, ParaId};
 use sp_io::hashing::{blake2_128, twox_256, twox_64};
 use sp_runtime::{KeyTypeId, Vec};
 
-/// OnDemandAssignmentProvider OnDemandQueue
-pub const ON_DEMAND_QUEUE: &[u8] =
-	&hex_literal::hex!["8f32430b49607f8d60bfd3a003ddf4b53f35b69d817556cf6b886e5b4f01fbdc"];
+/// OnDemand OnDemandQueue
+pub const AFFINITY_ENTRIES: &[u8] =
+	&hex_literal::hex!["331bae0b419c2dbbae4e5226b4516ba3ec3f20156dfc19e43db113f1ea70de12"];
 
-/// OnDemandAssignmentProvider QueueStatus
+pub const FREE_ENTRIES: &[u8] =
+	&hex_literal::hex!["331bae0b419c2dbbae4e5226b4516ba3968068db4a3d745e5ad373dedebe4b81"];
+
+/// OnDemand QueueStatus
 pub const QUEUE_STATUS: &[u8] =
-	&hex_literal::hex!["8f32430b49607f8d60bfd3a003ddf4b58bf29330833ea7904c7209f4ce9d917a"];
+	&hex_literal::hex!["331bae0b419c2dbbae4e5226b4516ba38bf29330833ea7904c7209f4ce9d917a"];
 
 /// Configuration ActiveConfig
 pub const ACTIVE_CONFIG: &[u8] =
@@ -56,6 +59,13 @@ pub fn session_key_owner(key_type: KeyTypeId, acc: Vec<u8>) -> Vec<u8> {
 pub fn core_descriptor(core_index: CoreIndex) -> Vec<u8> {
 	core_index.using_encoded(|core_index: &[u8]| {
 		CORE_DESCRIPTORS.iter().chain(twox_256(core_index).iter()).cloned().collect()
+	})
+}
+
+/// Returns the storage key for a specific affinity entry.
+pub fn affinity_entry(core_index: CoreIndex) -> Vec<u8> {
+	core_index.using_encoded(|core_index: &[u8]| {
+		AFFINITY_ENTRIES.iter().chain(twox_64(core_index).iter()).cloned().collect()
 	})
 }
 
