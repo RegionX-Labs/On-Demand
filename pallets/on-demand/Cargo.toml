@@ -28,8 +28,10 @@ staging-xcm-builder = { workspace = true, default-features = false }
 # Polkadot
 polkadot-runtime-parachains = { workspace = true, default-features = false }
 polkadot-primitives = { workspace = true, default-features = false }
+rococo-runtime = { workspace = true, default-features = false }
 
 # Cumulus
+cumulus-primitives-core = { workspace = true, default-features = false }
 cumulus-pallet-parachain-system = { workspace = true, default-features = false }
 
 # Local
@@ -73,10 +75,12 @@ std = [
 	"pallet-timestamp/std",
 	"pallet-transaction-payment/std",
 	"order-primitives/std",
+	"cumulus-primitives-core/std",
 	"cumulus-pallet-parachain-system/std",
 	"polkadot-runtime-parachains/std",
 	"polkadot-primitives/std",
 	"cumulus-pallet-parachain-system/std",
+	"rococo-runtime/std",
 	"staging-xcm-builder/std",
 ]
 try-runtime = [

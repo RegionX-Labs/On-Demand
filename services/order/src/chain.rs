@@ -1,18 +1,21 @@
 //! This file contains all the chain related interaction functions.
 
-use crate::chain::polkadot::{
-	on_demand_assignment_provider::storage::types::queue_status::QueueStatus,
-	runtime_types::{
-		pallet_broker::coretime_interface::CoreAssignment,
-		polkadot_parachain_primitives::primitives::Id,
-		polkadot_runtime_parachains::assigner_coretime::CoreDescriptor,
+use crate::{
+	chain::polkadot::{
+		on_demand_assignment_provider::storage::types::queue_status::QueueStatus,
+		runtime_types::{
+			pallet_broker::coretime_interface::CoreAssignment,
+			polkadot_parachain_primitives::primitives::Id,
+			polkadot_runtime_parachains::assigner_coretime::CoreDescriptor,
+		},
 	},
+	EnqueuedOrder,
 };
 use codec::{Codec, Decode};
 use cumulus_primitives_core::{relay_chain::CoreIndex, ParaId};
 use cumulus_relay_chain_interface::RelayChainInterface;
 use order_primitives::well_known_keys::{
-	core_descriptor, para_lifecycle, ACTIVE_CONFIG, QUEUE_STATUS,
+	affinity_entry, core_descriptor, para_lifecycle, ACTIVE_CONFIG, QUEUE_STATUS,
 };
 use polkadot_runtime_parachains::{configuration::HostConfiguration, ParaLifecycle};
 use sp_application_crypto::AppCrypto;
@@ -161,6 +164,38 @@ pub async fn is_parathread(
 
 	let is_parathread = para_lifecycle == Some(ParaLifecycle::Parathread);
 	Ok(is_parathread)
+}
+
+pub async fn affinity_entries(
+	relay_chain: &(impl RelayChainInterface + Clone),
+	hash: H256,
+) -> Option<Vec<EnqueuedOrder>> {
+	let active_config_storage = relay_chain.get_storage_by_key(hash, ACTIVE_CONFIG).await.ok()?;
+	let active_config = active_config_storage
+		.map(|raw| <HostConfiguration<u32>>::decode(&mut &raw[..]))
+		.transpose()
+		.ok()?;
+
+	let active_config = active_config?;
+
+	let mut entries = vec![];
+	for core in 0..active_config.scheduler_params.num_cores {
+		let affinity_entry_storage = relay_chain
+			.get_storage_by_key(hash, &affinity_entry(CoreIndex(core)))
+			.await
+			.ok()?;
+
+		let affinity_entry = affinity_entry_storage
+			.map(|raw| <EnqueuedOrder>::decode(&mut &raw[..]))
+			.transpose()
+			.ok()?;
+
+		if let Some(entry) = affinity_entry {
+			entries.push(entry)
+		}
+	}
+
+	Some(entries)
 }
 
 /// Checks if there are any cores allocated to on-demand.
