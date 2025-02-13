@@ -15,12 +15,18 @@ use cumulus_primitives_core::{
 };
 use cumulus_relay_chain_interface::{RelayChainInterface, RelayChainResult};
 use futures::{lock::Mutex, pin_mut, select, FutureExt, Stream, StreamExt};
-use order_primitives::{well_known_keys::FREE_ENTRIES, EnqueuedOrder, OrderRecord};
+use order_primitives::{
+	well_known_keys::FREE_ENTRIES, EnqueuedOrder, OnDemandRuntimeApi, OrderRecord,
+};
 use polkadot_primitives::OccupiedCoreAssumption;
 use sc_service::TaskManager;
+use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 use sp_keystore::KeystorePtr;
-use sp_runtime::{traits::Block as BlockT, RuntimeAppPublic};
+use sp_runtime::{
+	traits::{Block as BlockT, Header},
+	RuntimeAppPublic,
+};
 use std::{error::Error, net::SocketAddr, sync::Arc};
 use subxt::{OnlineClient, PolkadotConfig};
 
@@ -44,6 +50,12 @@ where
 	Config: OnDemandConfig + 'static,
 	Config::OrderPlacementCriteria:
 		OrderCriteria<P = Config::P, Block = Config::Block, ExPool = Config::ExPool>,
+	<<Config as OnDemandConfig>::P as ProvideRuntimeApi<Config::Block>>::Api: OnDemandRuntimeApi<
+		Config::Block,
+		Config::Balance,
+		RelayBlockNumber,
+		Config::ThresholdParameter,
+	>,
 {
 	let mut url = String::from("ws://"); // <- TODO wss
 	url.push_str(
@@ -83,6 +95,12 @@ async fn run_on_demand_task<Config>(
 	Config: OnDemandConfig + 'static,
 	Config::OrderPlacementCriteria:
 		OrderCriteria<P = Config::P, Block = Config::Block, ExPool = Config::ExPool>,
+	<<Config as OnDemandConfig>::P as ProvideRuntimeApi<Config::Block>>::Api: OnDemandRuntimeApi<
+		Config::Block,
+		Config::Balance,
+		RelayBlockNumber,
+		Config::ThresholdParameter,
+	>,
 {
 	log::info!(
 		target: LOG_TARGET,
@@ -164,6 +182,12 @@ async fn follow_relay_chain<Config>(
 	Config: OnDemandConfig + 'static,
 	Config::OrderPlacementCriteria:
 		OrderCriteria<P = Config::P, Block = Config::Block, ExPool = Config::ExPool>,
+	<<Config as OnDemandConfig>::P as ProvideRuntimeApi<Config::Block>>::Api: OnDemandRuntimeApi<
+		Config::Block,
+		Config::Balance,
+		RelayBlockNumber,
+		Config::ThresholdParameter,
+	>,
 {
 	let new_best_heads = match new_best_heads(relay_chain.clone(), para_id).await {
 		Ok(best_heads_stream) => best_heads_stream.fuse(),
@@ -228,6 +252,12 @@ where
 	Config: OnDemandConfig + 'static,
 	Config::OrderPlacementCriteria:
 		OrderCriteria<P = Config::P, Block = Config::Block, ExPool = Config::ExPool>,
+	<<Config as OnDemandConfig>::P as ProvideRuntimeApi<Config::Block>>::Api: OnDemandRuntimeApi<
+		Config::Block,
+		Config::Balance,
+		RelayBlockNumber,
+		Config::ThresholdParameter,
+	>,
 {
 	let is_parathread = is_parathread(&relay_chain, r_hash, para_id).await?;
 
@@ -235,6 +265,19 @@ where
 		log::info!(
 			target: LOG_TARGET,
 			"Not a parathread, relying on bulk coretime",
+		);
+
+		return Ok(());
+	}
+
+	let head_encoded = validation_data.clone().parent_head.0;
+	let para_head = <<Config::Block as BlockT>::Header>::decode(&mut &head_encoded[..])?;
+
+	let bulk_mode = parachain.runtime_api().bulk_mode(para_head.hash()).map_err(Box::new)?;
+	if bulk_mode {
+		log::info!(
+			target: LOG_TARGET,
+			"The parachain is in bulk mode; therefore, we won't proceed with order placement",
 		);
 
 		return Ok(());
@@ -279,9 +322,6 @@ where
 
 		return Ok(());
 	}
-
-	let head_encoded = validation_data.clone().parent_head.0;
-	let para_head = <<Config::Block as BlockT>::Header>::decode(&mut &head_encoded[..])?;
 
 	let order_placer = Config::order_placer(parachain, relay_height, para_head)?.clone();
 

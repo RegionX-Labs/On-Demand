@@ -313,5 +313,8 @@ impl_runtime_apis! {
 		fn threshold_parameter() -> ThresholdParameter {
 			OnDemand::threshold_parameter()
 		}
+		fn bulk_mode() -> bool {
+			OnDemand::bulk_mode().is_some()
+		}
 	}
 }

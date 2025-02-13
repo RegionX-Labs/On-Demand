@@ -37,6 +37,8 @@ async function orderPlacementWorks() {
     ];
     await force(relayApi, relayApi.tx.utility.batchAll(configureTxs));
 
+    await force(paraApi, paraApi.tx.onDemand.setBulkMode(false));
+
     // Assigning a core to the instantaneous coretime pool:
     await force(relayApi, relayApi.tx.coretime.assignCore(1, 0, [['Pool', 57600]], null));
 
@@ -50,7 +52,6 @@ async function orderPlacementWorks() {
     assert(paraHeight === newParaHeight, "Para should stop with block production");
 
     await force(relayApi, relayApi.tx.parasSudoWrapper.sudoScheduleParachainDowngrade(PARA_ID));
-    await force(paraApi, paraApi.tx.onDemand.setBulkMode(false));
     // Wait for new sesion for the parachain to downgrade:
     await sleep(120 * 1000);
 

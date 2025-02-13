@@ -62,5 +62,8 @@ sp_api::decl_runtime_apis! {
 
 		/// Runtime configured order placement threshold parameter.
 		fn threshold_parameter() -> ThresholdParameter;
+
+		/// Returns whether the parachain is in bulk mode or not.
+		fn bulk_mode() -> bool;
 	}
 }
