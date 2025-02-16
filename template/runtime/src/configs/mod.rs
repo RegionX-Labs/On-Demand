@@ -30,6 +30,8 @@ use polkadot_sdk::{staging_parachain_info as parachain_info, staging_xcm as xcm,
 use polkadot_sdk::{staging_xcm_builder as xcm_builder, staging_xcm_executor as xcm_executor};
 
 // Substrate and Polkadot dependencies
+use crate::frame_system::EventRecord;
+use alloc::{boxed::Box, vec::Vec};
 use cumulus_pallet_parachain_system::RelayNumberMonotonicallyIncreases;
 use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
 use frame_support::{
@@ -46,6 +48,7 @@ use frame_system::{
 	limits::{BlockLength, BlockWeights},
 	EnsureRoot,
 };
+use order_primitives::well_known_keys::EVENTS;
 use pallet_on_demand::FeeBasedCriteria;
 use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
@@ -67,7 +70,9 @@ use super::{
 	EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICRO_UNIT, MILLI_UNIT,
 	NORMAL_DISPATCH_RATIO, SLOT_DURATION, VERSION,
 };
+use cumulus_pallet_parachain_system::RelayChainStateProof;
 use pallet_on_demand::FixedReward;
+use polkadot_runtime_parachains::on_demand;
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
 parameter_types! {
@@ -333,6 +338,32 @@ parameter_types! {
 	pub const Reward: Balance = MILLI_UNIT;
 }
 
+pub struct OrderPlacementChecker;
+impl pallet_on_demand::OrderPlacement<Balance, AccountId> for OrderPlacementChecker {
+	fn orders_placed(
+		relay_state_proof: RelayChainStateProof,
+		expected_para_id: ParaId,
+	) -> Vec<(Balance, AccountId)> {
+		let events = relay_state_proof
+			.read_entry::<Vec<Box<EventRecord<rococo_runtime::RuntimeEvent, Hash>>>>(EVENTS, None)
+			.ok()
+			.map(|vec| vec.into_iter().filter_map(|event| Some(event)).collect::<Vec<_>>())
+			.unwrap_or_default();
+
+		let result: Vec<(Balance, AccountId)> = events
+			.into_iter()
+			.filter_map(|item| match item.event {
+				rococo_runtime::RuntimeEvent::OnDemandAssignmentProvider(
+					on_demand::Event::OnDemandOrderPlaced { para_id, spot_price, ordered_by },
+				) if para_id == expected_para_id => Some((spot_price, ordered_by)),
+				_ => None,
+			})
+			.collect();
+
+		result
+	}
+}
+
 impl pallet_on_demand::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type AdminOrigin = EnsureRoot<AccountId>;
@@ -344,6 +375,7 @@ impl pallet_on_demand::Config for Runtime {
 	type RewardSize = FixedReward<Balance, Reward>;
 	type ToAccountId = ToAccountIdImpl;
 	type OrderPlacementCriteria = FeeBasedCriteria<Runtime, ExtrinsicBaseWeight>;
+	type OrderPlacement = OrderPlacementChecker;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = BenchHelper;
 	type WeightInfo = ();

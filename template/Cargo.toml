@@ -31,6 +31,8 @@ sc-tracing = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = 
 
 # Polkadot
 polkadot-primitives = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
+polkadot-runtime-parachains = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
+rococo-runtime = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 
 # Cumulus
 cumulus-pallet-parachain-system = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }

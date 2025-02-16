@@ -29,6 +29,10 @@ serde_json = { workspace = true, default-features = false, features = ["alloc"] 
 order-primitives = { workspace = true, default-features = false }
 pallet-on-demand = { workspace = true, default-features = false }
 
+# Polkadot
+polkadot-runtime-parachains = { workspace = true, default-features = false }
+rococo-runtime = { workspace = true, default-features = false }
+
 # Local
 pallet-parachain-template = { workspace = true, default-features = false }
 
@@ -81,6 +85,8 @@ std = [
 	"scale-info/std",
 	"serde_json/std",
 	"substrate-wasm-builder",
+	"rococo-runtime/std",
+	"polkadot-runtime-parachains/std",
 ]
 
 runtime-benchmarks = [
