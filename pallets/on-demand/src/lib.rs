@@ -70,6 +70,7 @@ pub mod pallet {
 		traits::{AtLeast32BitUnsigned, Convert},
 		AccountId32, RuntimeAppPublic,
 	};
+	use cumulus_primitives_core::ParaId;
 
 	/// The module configuration trait.
 	#[pallet::config]
@@ -257,6 +258,17 @@ pub mod pallet {
 		}
 	}
 
+	#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+	enum RelayChainEvent<Balance, Account> {
+		#[codec(index = 66)]
+		OnDemandAssignmentProvider(OnDemandEvent<Balance, Account>),
+	}
+	#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+	enum OnDemandEvent<Balance, Account> {
+		/// An order was placed at some spot price amount by orderer ordered_by
+		OnDemandOrderPlaced { para_id: ParaId, spot_price: Balance, ordered_by: Account },	
+	}
+
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
@@ -299,19 +311,18 @@ pub mod pallet {
 			.expect("Invalid relay chain state proof");
 
 			let events = relay_state_proof
-				.read_entry::<Vec<Box<EventRecord<rococo_runtime::RuntimeEvent, T::Hash>>>>(
+				.read_entry::<Vec<Box<EventRecord<RelayChainEvent<BalanceOf<T>, T::AccountId>, T::Hash>>>>(
 					EVENTS, None,
 				)
-				.map_err(|e| match e {
-					RelayError::ReadEntry(_) => Error::InvalidProof,
-					_ => Error::<T>::FailedProofReading,
-				})?;
+				.ok()
+				.map(|vec| vec.into_iter().filter_map(|event| Some(event)).collect::<Vec<_>>())
+				.unwrap_or_default();
 
-			let result: Vec<(u128, AccountId32)> = events
+			let result: Vec<(BalanceOf<T>, AccountId32)> = events
 				.into_iter()
 				.filter_map(|item| match item.event {
-					rococo_runtime::RuntimeEvent::OnDemandAssignmentProvider(
-						on_demand::Event::OnDemandOrderPlaced { para_id, spot_price, ordered_by },
+					RelayChainEvent::<BalanceOf<T>, T::AccountId>::OnDemandAssignmentProvider(
+						OnDemandEvent::<BalanceOf<T>, T::AccountId>::OnDemandOrderPlaced { para_id, spot_price, ordered_by },
 					) if para_id == data.para_id => Some((spot_price, ordered_by)),
 					_ => None,
 				})
