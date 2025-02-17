@@ -28,7 +28,6 @@ staging-xcm-builder = { workspace = true, default-features = false }
 # Polkadot
 polkadot-runtime-parachains = { workspace = true, default-features = false }
 polkadot-primitives = { workspace = true, default-features = false }
-rococo-runtime = { workspace = true, default-features = false }
 
 # Cumulus
 cumulus-primitives-core = { workspace = true, default-features = false }
@@ -82,7 +81,6 @@ std = [
 	"polkadot-runtime-parachains/std",
 	"polkadot-primitives/std",
 	"cumulus-pallet-parachain-system/std",
-	"rococo-runtime/std",
 	"staging-xcm-builder/std",
 ]
 try-runtime = [
