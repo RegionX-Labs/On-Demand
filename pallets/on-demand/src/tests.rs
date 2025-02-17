@@ -1,5 +1,5 @@
 use crate::{
-	mock::{new_test_ext, OnDemand, RuntimeOrigin, System, Test},
+	mock::{alice, new_test_ext, OnDemand, RuntimeOrigin, System, Test},
 	BulkMode, Event, SlotWidth, ThresholdParameter,
 };
 use frame_support::{assert_noop, assert_ok};
@@ -11,7 +11,7 @@ fn set_slot_width_works() {
 		assert_eq!(SlotWidth::<Test>::get(), 0);
 
 		// Failure: Bad origin
-		assert_noop!(OnDemand::set_slot_width(RuntimeOrigin::signed(1), 1), BadOrigin);
+		assert_noop!(OnDemand::set_slot_width(RuntimeOrigin::signed(alice()), 1), BadOrigin);
 
 		// Should be working fine
 		assert_ok!(OnDemand::set_slot_width(RuntimeOrigin::root(), 1));
@@ -30,7 +30,10 @@ fn set_threshold_parameter_works() {
 		assert_eq!(ThresholdParameter::<Test>::get(), 0);
 
 		// Failure: Bad origin
-		assert_noop!(OnDemand::set_threshold_parameter(RuntimeOrigin::signed(1), 1_000), BadOrigin);
+		assert_noop!(
+			OnDemand::set_threshold_parameter(RuntimeOrigin::signed(alice()), 1_000),
+			BadOrigin
+		);
 
 		// Should be working fine
 		assert_ok!(OnDemand::set_threshold_parameter(RuntimeOrigin::root(), 1_000));
@@ -49,7 +52,7 @@ fn set_bulk_mode_works() {
 		assert_eq!(ThresholdParameter::<Test>::get(), 0);
 
 		// Failure: Bad origin
-		assert_noop!(OnDemand::set_bulk_mode(RuntimeOrigin::signed(1), true), BadOrigin);
+		assert_noop!(OnDemand::set_bulk_mode(RuntimeOrigin::signed(alice()), true), BadOrigin);
 
 		// Should be working fine
 		assert_ok!(OnDemand::set_bulk_mode(RuntimeOrigin::root(), true));

@@ -1,4 +1,6 @@
 use crate::FixedReward;
+use cumulus_pallet_parachain_system::RelayChainStateProof;
+use cumulus_primitives_core::ParaId;
 use frame_support::{
 	pallet_prelude::*,
 	parameter_types,
@@ -8,16 +10,21 @@ use frame_support::{
 use frame_system::{pallet_prelude::*, EnsureRoot};
 use pallet_transaction_payment::FungibleAdapter;
 use sp_core::{ConstBool, ConstU64, ConstU8, H256};
+use sp_keyring::Sr25519Keyring;
 use sp_runtime::{
 	testing::UintAuthorityId,
 	traits::{BlakeTwo256, Convert, IdentityLookup, OpaqueKeys},
-	BuildStorage, RuntimeAppPublic,
+	AccountId32, BuildStorage, RuntimeAppPublic,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
-type AccountId = u64;
+type AccountId = AccountId32;
 type Balance = u64;
 type BlockNumber = u32;
+
+pub fn alice() -> AccountId {
+	Sr25519Keyring::Alice.to_account_id()
+}
 
 frame_support::construct_runtime!(
 	pub enum Test
@@ -47,7 +54,7 @@ impl frame_system::Config for Test {
 	type Nonce = u64;
 	type Hash = H256;
 	type Hashing = BlakeTwo256;
-	type AccountId = u64;
+	type AccountId = AccountId32;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type Block = Block;
 	type RuntimeEvent = RuntimeEvent;
@@ -116,20 +123,20 @@ impl From<UintAuthorityId> for MockSessionKeys {
 }
 
 parameter_types! {
-	pub static SessionHandlerCollators: Vec<u64> = Vec::new();
+	pub static SessionHandlerCollators: Vec<AccountId> = Vec::new();
 	pub static SessionChangeBlock: u64 = 0;
 }
 
 pub struct TestSessionHandler;
-impl pallet_session::SessionHandler<u64> for TestSessionHandler {
+impl pallet_session::SessionHandler<AccountId> for TestSessionHandler {
 	const KEY_TYPE_IDS: &'static [sp_runtime::KeyTypeId] = &[UintAuthorityId::ID];
-	fn on_genesis_session<Ks: OpaqueKeys>(keys: &[(u64, Ks)]) {
-		SessionHandlerCollators::set(keys.iter().map(|(a, _)| *a).collect::<Vec<_>>())
+	fn on_genesis_session<Ks: OpaqueKeys>(keys: &[(AccountId, Ks)]) {
+		SessionHandlerCollators::set(keys.iter().map(|(a, _)| a.clone()).collect::<Vec<_>>())
 	}
-	fn on_new_session<Ks: OpaqueKeys>(_: bool, keys: &[(u64, Ks)], _: &[(u64, Ks)]) {
+	fn on_new_session<Ks: OpaqueKeys>(_: bool, keys: &[(AccountId, Ks)], _: &[(AccountId, Ks)]) {
 		SessionChangeBlock::set(System::block_number());
 		dbg!(keys.len());
-		SessionHandlerCollators::set(keys.iter().map(|(a, _)| *a).collect::<Vec<_>>())
+		SessionHandlerCollators::set(keys.iter().map(|(a, _)| a.clone()).collect::<Vec<_>>())
 	}
 	fn on_before_session_ending() {}
 	fn on_disabled(_: u32) {}
@@ -184,8 +191,8 @@ impl crate::BenchmarkHelper<Balance> for BenchHelper {
 }
 
 pub struct ToAccountIdImpl;
-impl Convert<u64, u64> for ToAccountIdImpl {
-	fn convert(v: u64) -> u64 {
+impl Convert<AccountId, AccountId32> for ToAccountIdImpl {
+	fn convert(v: AccountId) -> AccountId {
 		v
 	}
 }
@@ -194,6 +201,17 @@ parameter_types! {
 	pub const Reward: u64 = 1_000_000;
 	pub const BaseWeight: Weight =
 		Weight::from_parts(125_000, 0);
+}
+
+pub struct OrderPlacementChecker;
+impl crate::OrdersPlaced<Balance, AccountId> for OrderPlacementChecker {
+	fn orders_placed(
+		_relay_state_proof: RelayChainStateProof,
+		_expected_para_id: ParaId,
+	) -> Vec<(Balance, AccountId)> {
+		// Dummy implementation.
+		Default::default()
+	}
 }
 
 impl crate::Config for Test {
@@ -207,6 +225,7 @@ impl crate::Config for Test {
 	type RewardSize = FixedReward<Balance, Reward>;
 	type ToAccountId = ToAccountIdImpl;
 	type OrderPlacementCriteria = crate::FeeBasedCriteria<Test, BaseWeight>;
+	type OrdersPlaced = OrderPlacementChecker;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = BenchHelper;
 	type WeightInfo = ();

@@ -6447,6 +6447,7 @@ dependencies = [
  "sp-consensus-aura",
  "sp-core",
  "sp-io",
+ "sp-keyring",
  "sp-runtime",
  "staging-xcm-builder",
 ]
