@@ -13,7 +13,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 use pallet_transaction_payment::OnChargeTransaction;
-use sp_runtime::{traits::Debug, FixedPointNumber, SaturatedConversion, Saturating};
+use sp_runtime::{FixedPointNumber, SaturatedConversion, Saturating};
 
 pub use pallet::*;
 
@@ -66,9 +66,7 @@ pub trait OrderPlacement<Balance, Account> {
 pub mod pallet {
 	use super::*;
 	use crate::weights::WeightInfo;
-	use alloc::boxed::Box;
 	use codec::MaxEncodedLen;
-	use cumulus_pallet_parachain_system::relay_state_snapshot::Error as RelayError;
 	use cumulus_primitives_core::relay_chain;
 	use frame_support::{
 		traits::{
@@ -77,9 +75,7 @@ pub mod pallet {
 		},
 		DefaultNoBound,
 	};
-	use frame_system::EventRecord;
-	use order_primitives::{well_known_keys::EVENTS, OrderInherentData};
-	use polkadot_runtime_parachains::on_demand;
+	use order_primitives::OrderInherentData;
 	use sp_runtime::{
 		traits::{AtLeast32BitUnsigned, Convert},
 		AccountId32, RuntimeAppPublic,
