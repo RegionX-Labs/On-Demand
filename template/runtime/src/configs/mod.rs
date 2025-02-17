@@ -339,7 +339,7 @@ parameter_types! {
 }
 
 pub struct OrderPlacementChecker;
-impl pallet_on_demand::OrderPlacement<Balance, AccountId> for OrderPlacementChecker {
+impl pallet_on_demand::OrdersPlaced<Balance, AccountId> for OrderPlacementChecker {
 	fn orders_placed(
 		relay_state_proof: RelayChainStateProof,
 		expected_para_id: ParaId,
@@ -375,7 +375,7 @@ impl pallet_on_demand::Config for Runtime {
 	type RewardSize = FixedReward<Balance, Reward>;
 	type ToAccountId = ToAccountIdImpl;
 	type OrderPlacementCriteria = FeeBasedCriteria<Runtime, ExtrinsicBaseWeight>;
-	type OrderPlacement = OrderPlacementChecker;
+	type OrdersPlaced = OrderPlacementChecker;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = BenchHelper;
 	type WeightInfo = ();

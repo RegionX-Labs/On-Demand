@@ -49,7 +49,7 @@ pub trait RuntimeOrderCriteria {
 	fn should_place_order() -> bool;
 }
 
-pub trait OrderPlacement<Balance, Account> {
+pub trait OrdersPlaced<Balance, Account> {
 	/// Returns the spot price and the order placer if an `OnDemandOrderPlaced` event is found.
 	///
 	/// Given that there can be multiple orders in a single block, the function returns a vector.
@@ -139,7 +139,7 @@ pub mod pallet {
 		type OrderPlacementCriteria: RuntimeOrderCriteria;
 
 		/// Type implementing the logic to check if an order was placed and extracting data from it.
-		type OrderPlacement: OrderPlacement<BalanceOf<Self>, Self::AccountId>;
+		type OrdersPlaced: OrdersPlaced<BalanceOf<Self>, Self::AccountId>;
 
 		#[cfg(feature = "runtime-benchmarks")]
 		type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
@@ -311,7 +311,7 @@ pub mod pallet {
 			)
 			.expect("Invalid relay chain state proof");
 
-			let result = T::OrderPlacement::orders_placed(relay_state_proof, data.para_id);
+			let result = T::OrdersPlaced::orders_placed(relay_state_proof, data.para_id);
 
 			let Some(order_placer) = Self::order_placer_at(data.relay_height) else {
 				return Ok(().into());
