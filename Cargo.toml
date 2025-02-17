@@ -62,19 +62,12 @@ sp-trie = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "st
 sp-debug-derive = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false, features = [ "force-debug" ]}
 
 pallet-aura = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
-pallet-asset-rate = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 pallet-balances = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 pallet-collator-selection = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
-pallet-collective = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
-pallet-conviction-voting = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
-pallet-ranked-collective = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
-pallet-referenda = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 pallet-session = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
-pallet-society = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 pallet-staking = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 pallet-timestamp = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 pallet-transaction-payment = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
-pallet-xcm = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 
 staging-xcm-builder = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
 substrate-prometheus-endpoint = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2412", default-features = false }
