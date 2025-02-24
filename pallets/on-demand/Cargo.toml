@@ -28,7 +28,6 @@ staging-xcm-builder = { workspace = true, default-features = false }
 # Polkadot
 polkadot-runtime-parachains = { workspace = true, default-features = false }
 polkadot-primitives = { workspace = true, default-features = false }
-rococo-runtime = { workspace = true, default-features = false }
 
 # Cumulus
 cumulus-primitives-core = { workspace = true, default-features = false }
@@ -41,6 +40,7 @@ order-primitives = { workspace = true, default-features = false }
 sp-core = { workspace = true, default-features = false }
 sp-io = { workspace = true, default-features = false }
 sp-consensus-aura = { workspace = true, default-features = false }
+sp-keyring = { workspace = true, default-features = false }
 pallet-balances = { workspace = true, default-features = false }
 pallet-collator-selection = { workspace = true, default-features = false }
 pallet-timestamp = { workspace = true, default-features = false }
@@ -67,6 +67,7 @@ std = [
 	"sp-core/std",
 	"sp-consensus-aura/std",
 	"sp-io/std",
+	"sp-keyring/std",
 	"pallet-aura/std",
 	"pallet-balances/std",
 	"pallet-collator-selection/std",
@@ -80,7 +81,6 @@ std = [
 	"polkadot-runtime-parachains/std",
 	"polkadot-primitives/std",
 	"cumulus-pallet-parachain-system/std",
-	"rococo-runtime/std",
 	"staging-xcm-builder/std",
 ]
 try-runtime = [

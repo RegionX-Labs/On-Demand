@@ -4,6 +4,9 @@
 
 extern crate alloc;
 
+use alloc::vec::Vec;
+use cumulus_pallet_parachain_system::RelayChainStateProof;
+use cumulus_primitives_core::ParaId;
 use frame_support::{
 	pallet_prelude::*,
 	traits::{fungible::Inspect, tokens::Balance as BalanceT},
@@ -46,14 +49,25 @@ pub trait RuntimeOrderCriteria {
 	fn should_place_order() -> bool;
 }
 
+pub trait OrdersPlaced<Balance, Account> {
+	/// Returns the spot price and the order placer if an `OnDemandOrderPlaced` event is found.
+	///
+	/// Given that there can be multiple orders in a single block, the function returns a vector.
+	///
+	/// Arguments:
+	/// - `relay_state_proof`: state proof from which the events are read.
+	fn orders_placed(
+		relay_state_proof: RelayChainStateProof,
+		expected_para_id: ParaId,
+	) -> Vec<(Balance, Account)>;
+}
+
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
 	use crate::weights::WeightInfo;
-	use alloc::{boxed::Box, vec::Vec};
 	use codec::MaxEncodedLen;
-	use cumulus_pallet_parachain_system::RelayChainStateProof;
-	use cumulus_primitives_core::{relay_chain, ParaId};
+	use cumulus_primitives_core::relay_chain;
 	use frame_support::{
 		traits::{
 			fungible::{Inspect, Mutate},
@@ -61,8 +75,7 @@ pub mod pallet {
 		},
 		DefaultNoBound,
 	};
-	use frame_system::EventRecord;
-	use order_primitives::{well_known_keys::EVENTS, OrderInherentData};
+	use order_primitives::OrderInherentData;
 	use sp_runtime::{
 		traits::{AtLeast32BitUnsigned, Convert},
 		AccountId32, RuntimeAppPublic,
@@ -124,6 +137,9 @@ pub mod pallet {
 
 		/// Implements logic to check whether an order should have been placed.
 		type OrderPlacementCriteria: RuntimeOrderCriteria;
+
+		/// Type implementing the logic to check if an order was placed and extracting data from it.
+		type OrdersPlaced: OrdersPlaced<BalanceOf<Self>, Self::AccountId>;
 
 		#[cfg(feature = "runtime-benchmarks")]
 		type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
@@ -306,27 +322,8 @@ pub mod pallet {
 			)
 			.expect("Invalid relay chain state proof");
 
-			let events = relay_state_proof
-				.read_entry::<Vec<Box<EventRecord<RelayChainEvent<BalanceOf<T>, T::AccountId>, T::Hash>>>>(
-					EVENTS, None,
-				)
-				.ok()
-				.map(|vec| vec.into_iter().filter_map(|event| Some(event)).collect::<Vec<_>>())
-				.unwrap_or_default();
 
-			let result: Vec<(BalanceOf<T>, AccountId32)> = events
-				.into_iter()
-				.filter_map(|item| match item.event {
-					RelayChainEvent::<BalanceOf<T>, T::AccountId>::OnDemandAssignmentProvider(
-						OnDemandEvent::<BalanceOf<T>, T::AccountId>::OnDemandOrderPlaced {
-							para_id,
-							spot_price,
-							ordered_by,
-						},
-					) if para_id == data.para_id => Some((spot_price, ordered_by)),
-					_ => None,
-				})
-				.collect();
+			let result = T::OrdersPlaced::orders_placed(relay_state_proof, data.para_id);
 
 			let Some(order_placer) = Self::order_placer_at(data.relay_height) else {
 				return Ok(().into());
