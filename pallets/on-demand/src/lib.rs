@@ -52,10 +52,8 @@ pub mod pallet {
 	use crate::weights::WeightInfo;
 	use alloc::{boxed::Box, vec::Vec};
 	use codec::MaxEncodedLen;
-	use cumulus_pallet_parachain_system::{
-		relay_state_snapshot::Error as RelayError, RelayChainStateProof,
-	};
-	use cumulus_primitives_core::relay_chain;
+	use cumulus_pallet_parachain_system::RelayChainStateProof;
+	use cumulus_primitives_core::{relay_chain, ParaId};
 	use frame_support::{
 		traits::{
 			fungible::{Inspect, Mutate},
@@ -65,12 +63,10 @@ pub mod pallet {
 	};
 	use frame_system::EventRecord;
 	use order_primitives::{well_known_keys::EVENTS, OrderInherentData};
-	use polkadot_runtime_parachains::on_demand;
 	use sp_runtime::{
 		traits::{AtLeast32BitUnsigned, Convert},
 		AccountId32, RuntimeAppPublic,
 	};
-	use cumulus_primitives_core::ParaId;
 
 	/// The module configuration trait.
 	#[pallet::config]
@@ -266,7 +262,7 @@ pub mod pallet {
 	#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 	enum OnDemandEvent<Balance, Account> {
 		/// An order was placed at some spot price amount by orderer ordered_by
-		OnDemandOrderPlaced { para_id: ParaId, spot_price: Balance, ordered_by: Account },	
+		OnDemandOrderPlaced { para_id: ParaId, spot_price: Balance, ordered_by: Account },
 	}
 
 	#[pallet::call]
@@ -322,7 +318,11 @@ pub mod pallet {
 				.into_iter()
 				.filter_map(|item| match item.event {
 					RelayChainEvent::<BalanceOf<T>, T::AccountId>::OnDemandAssignmentProvider(
-						OnDemandEvent::<BalanceOf<T>, T::AccountId>::OnDemandOrderPlaced { para_id, spot_price, ordered_by },
+						OnDemandEvent::<BalanceOf<T>, T::AccountId>::OnDemandOrderPlaced {
+							para_id,
+							spot_price,
+							ordered_by,
+						},
 					) if para_id == data.para_id => Some((spot_price, ordered_by)),
 					_ => None,
 				})

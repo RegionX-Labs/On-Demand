@@ -21,6 +21,7 @@ use order_primitives::{
 use polkadot_primitives::OccupiedCoreAssumption;
 use sc_service::TaskManager;
 use sp_api::ProvideRuntimeApi;
+use sp_consensus_aura::AuraApi;
 use sp_core::H256;
 use sp_keystore::KeystorePtr;
 use sp_runtime::{
@@ -51,11 +52,11 @@ where
 	Config::OrderPlacementCriteria:
 		OrderCriteria<P = Config::P, Block = Config::Block, ExPool = Config::ExPool>,
 	<<Config as OnDemandConfig>::P as ProvideRuntimeApi<Config::Block>>::Api: OnDemandRuntimeApi<
-		Config::Block,
-		Config::Balance,
-		RelayBlockNumber,
-		Config::ThresholdParameter,
-	>,
+			Config::Block,
+			Config::Balance,
+			RelayBlockNumber,
+			Config::ThresholdParameter,
+		> + AuraApi<Config::Block, Config::AuthorPub>,
 {
 	let mut url = String::from("ws://"); // <- TODO wss
 	url.push_str(
@@ -96,11 +97,11 @@ async fn run_on_demand_task<Config>(
 	Config::OrderPlacementCriteria:
 		OrderCriteria<P = Config::P, Block = Config::Block, ExPool = Config::ExPool>,
 	<<Config as OnDemandConfig>::P as ProvideRuntimeApi<Config::Block>>::Api: OnDemandRuntimeApi<
-		Config::Block,
-		Config::Balance,
-		RelayBlockNumber,
-		Config::ThresholdParameter,
-	>,
+			Config::Block,
+			Config::Balance,
+			RelayBlockNumber,
+			Config::ThresholdParameter,
+		> + AuraApi<Config::Block, Config::AuthorPub>,
 {
 	log::info!(
 		target: LOG_TARGET,
@@ -183,11 +184,11 @@ async fn follow_relay_chain<Config>(
 	Config::OrderPlacementCriteria:
 		OrderCriteria<P = Config::P, Block = Config::Block, ExPool = Config::ExPool>,
 	<<Config as OnDemandConfig>::P as ProvideRuntimeApi<Config::Block>>::Api: OnDemandRuntimeApi<
-		Config::Block,
-		Config::Balance,
-		RelayBlockNumber,
-		Config::ThresholdParameter,
-	>,
+			Config::Block,
+			Config::Balance,
+			RelayBlockNumber,
+			Config::ThresholdParameter,
+		> + AuraApi<Config::Block, Config::AuthorPub>,
 {
 	let new_best_heads = match new_best_heads(relay_chain.clone(), para_id).await {
 		Ok(best_heads_stream) => best_heads_stream.fuse(),
@@ -253,11 +254,11 @@ where
 	Config::OrderPlacementCriteria:
 		OrderCriteria<P = Config::P, Block = Config::Block, ExPool = Config::ExPool>,
 	<<Config as OnDemandConfig>::P as ProvideRuntimeApi<Config::Block>>::Api: OnDemandRuntimeApi<
-		Config::Block,
-		Config::Balance,
-		RelayBlockNumber,
-		Config::ThresholdParameter,
-	>,
+			Config::Block,
+			Config::Balance,
+			RelayBlockNumber,
+			Config::ThresholdParameter,
+		> + AuraApi<Config::Block, Config::AuthorPub>,
 {
 	let is_parathread = is_parathread(&relay_chain, r_hash, para_id).await?;
 
@@ -323,7 +324,10 @@ where
 		return Ok(());
 	}
 
-	let order_placer = Config::order_placer(parachain, relay_height, para_head)?.clone();
+	let authorities = parachain.runtime_api().authorities(para_head.hash()).map_err(Box::new)?;
+	let slot_width = parachain.runtime_api().slot_width(para_head.hash()).map_err(Box::new)?;
+	let order_placer =
+		crate::config::order_placer::<Config>(authorities, relay_height, slot_width)?.clone();
 
 	if !keystore.has_keys(&[(order_placer.to_raw_vec(), sp_application_crypto::key_types::AURA)]) {
 		// Expected author is not in the keystore therefore we are not responsible for order
@@ -356,7 +360,8 @@ where
 		"Placing an order",
 	);
 
-	chain::submit_order(&relay_url, para_id, spot_price.into(), keystore).await?;
+	chain::submit_order(&relay_url, para_id, relay_height, slot_width, spot_price.into(), keystore)
+		.await?;
 
 	let order_record_clone = order_record.clone();
 	let mut record = order_record_clone.lock().await;

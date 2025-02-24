@@ -9,7 +9,7 @@ use crate::{
 			polkadot_runtime_parachains::assigner_coretime::CoreDescriptor,
 		},
 	},
-	EnqueuedOrder,
+	EnqueuedOrder, RelayBlockNumber,
 };
 use codec::{Codec, Decode};
 use cumulus_primitives_core::{relay_chain::CoreIndex, ParaId};
@@ -26,7 +26,10 @@ use sp_runtime::{
 	MultiSignature as SpMultiSignature, SaturatedConversion,
 };
 use std::{error::Error, fmt::Debug};
-use subxt::{tx::Signer, utils::MultiSignature, Config, OnlineClient, PolkadotConfig};
+use subxt::{
+	config::DefaultExtrinsicParamsBuilder as Params, tx::Signer, utils::MultiSignature, Config,
+	OnlineClient, PolkadotConfig,
+};
 
 #[subxt::subxt(runtime_metadata_path = "../../artifacts/metadata.scale")]
 pub mod polkadot {}
@@ -98,6 +101,8 @@ where
 pub async fn submit_order(
 	url: &str,
 	para_id: ParaId,
+	relay_height: RelayBlockNumber,
+	slot_width: u32,
 	max_amount: u128,
 	keystore: KeystorePtr,
 ) -> Result<(), Box<dyn Error>> {
@@ -108,9 +113,22 @@ pub async fn submit_order(
 		.place_order_allow_death(max_amount, Id(para_id.into()));
 
 	let signer_keystore = SignerKeystore::<PolkadotConfig>::new(keystore.clone());
+	let first_block_in_slot = crate::config::current_slot(relay_height, slot_width) * slot_width;
 
-	// TODO: Ideally the transaction should only be valid for one slot.
-	let submit_result = client.tx().sign_and_submit_default(&place_order, &signer_keystore).await;
+	let hash_query = polkadot::storage().system().block_hash(&first_block_in_slot);
+	let hash = client
+		.storage()
+		.at_latest()
+		.await?
+		.fetch(&hash_query)
+		.await?
+		.ok_or("Failed to get hash of slot starting block")?;
+
+	let block = client.blocks().at(hash).await?;
+
+	let tx_params = Params::new().mortal(block.header(), slot_width.into()).build();
+	let submit_result =
+		client.tx().sign_and_submit(&place_order, &signer_keystore, tx_params).await;
 	log::info!("submit_result: {:?}", submit_result);
 	submit_result?;
 
