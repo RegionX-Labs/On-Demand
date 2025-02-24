@@ -8922,7 +8922,6 @@ dependencies = [
  "parity-scale-codec",
  "polkadot-primitives",
  "polkadot-runtime-parachains",
- "rococo-runtime",
  "scale-info",
  "sp-application-crypto",
  "sp-runtime",

@@ -270,17 +270,6 @@ pub mod pallet {
 		}
 	}
 
-	#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-	enum RelayChainEvent<Balance, Account> {
-		#[codec(index = 66)]
-		OnDemandAssignmentProvider(OnDemandEvent<Balance, Account>),
-	}
-	#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-	enum OnDemandEvent<Balance, Account> {
-		/// An order was placed at some spot price amount by orderer ordered_by
-		OnDemandOrderPlaced { para_id: ParaId, spot_price: Balance, ordered_by: Account },
-	}
-
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
@@ -321,7 +310,6 @@ pub mod pallet {
 				data.relay_storage_proof,
 			)
 			.expect("Invalid relay chain state proof");
-
 
 			let result = T::OrdersPlaced::orders_placed(relay_state_proof, data.para_id);
 
