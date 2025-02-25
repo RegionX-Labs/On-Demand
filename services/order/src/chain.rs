@@ -113,20 +113,28 @@ pub async fn submit_order(
 		.place_order_allow_death(max_amount, Id(para_id.into()));
 
 	let signer_keystore = SignerKeystore::<PolkadotConfig>::new(keystore.clone());
-	let first_block_in_slot = crate::config::current_slot(relay_height, slot_width) * slot_width;
+	let first_block_in_slot = crate::config::current_slot(relay_height, slot_width) << slot_width;
 
 	let hash_query = polkadot::storage().system().block_hash(&first_block_in_slot);
-	let hash = client
+	let hash_result = client
 		.storage()
 		.at_latest()
 		.await?
 		.fetch(&hash_query)
 		.await?
-		.ok_or("Failed to get hash of slot starting block")?;
+		.ok_or("Failed to get hash of slot starting block");
 
-	let block = client.blocks().at(hash).await?;
+	// TODO: hash result always errors..
+	let block = match hash_result {
+		Ok(_hash) => {
+			client.blocks().at(_hash).await?
+		},
+		Err(_) => {
+			client.blocks().at_latest().await?
+		}
+	};
 
-	let tx_params = Params::new().mortal(block.header(), slot_width.into()).build();
+	let tx_params = Params::new().mortal(block.header(), 1 << slot_width.into()).build();
 	let submit_result =
 		client.tx().sign_and_submit(&place_order, &signer_keystore, tx_params).await;
 	log::info!("submit_result: {:?}", submit_result);
