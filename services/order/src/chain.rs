@@ -27,8 +27,11 @@ use sp_runtime::{
 };
 use std::{error::Error, fmt::Debug};
 use subxt::{
-	config::DefaultExtrinsicParamsBuilder as Params, tx::Signer, utils::MultiSignature, Config,
-	OnlineClient, PolkadotConfig,
+	backend::{legacy::LegacyRpcMethods, rpc::RpcClient},
+	config::DefaultExtrinsicParamsBuilder as Params,
+	tx::Signer,
+	utils::MultiSignature,
+	Config, OnlineClient, PolkadotConfig,
 };
 
 #[subxt::subxt(runtime_metadata_path = "../../artifacts/metadata.scale")]
@@ -107,6 +110,9 @@ pub async fn submit_order(
 	keystore: KeystorePtr,
 ) -> Result<(), Box<dyn Error>> {
 	let client = OnlineClient::<PolkadotConfig>::from_url(url).await?;
+	let rpc_client = RpcClient::from_url(url).await?;
+
+	let rpc = LegacyRpcMethods::<PolkadotConfig>::new(rpc_client.clone());
 
 	let place_order = polkadot::tx()
 		.on_demand_assignment_provider()
@@ -115,26 +121,16 @@ pub async fn submit_order(
 	let signer_keystore = SignerKeystore::<PolkadotConfig>::new(keystore.clone());
 	let first_block_in_slot = crate::config::current_slot(relay_height, slot_width) << slot_width;
 
-	let hash_query = polkadot::storage().system().block_hash(&first_block_in_slot);
-	let hash_result = client
-		.storage()
-		.at_latest()
+	let block_hash = rpc
+		.chain_get_block_hash(Some(first_block_in_slot.into()))
 		.await?
-		.fetch(&hash_query)
-		.await?
-		.ok_or("Failed to get hash of slot starting block");
+		.ok_or("Failed to get hash of slot starting block")?;
 
-	// TODO: hash result always errors..
-	let block = match hash_result {
-		Ok(_hash) => {
-			client.blocks().at(_hash).await?
-		},
-		Err(_) => {
-			client.blocks().at_latest().await?
-		}
-	};
+	let block = client.blocks().at(block_hash).await?;
 
-	let tx_params = Params::new().mortal(block.header(), 1 << slot_width.into()).build();
+	let mortality = 1u32 << slot_width;
+
+	let tx_params = Params::new().mortal(block.header(), mortality.into()).build();
 	let submit_result =
 		client.tx().sign_and_submit(&place_order, &signer_keystore, tx_params).await;
 	log::info!("submit_result: {:?}", submit_result);
