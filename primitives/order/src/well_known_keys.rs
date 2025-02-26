@@ -3,14 +3,6 @@ use cumulus_primitives_core::{relay_chain::CoreIndex, ParaId};
 use sp_io::hashing::{blake2_128, twox_256, twox_64};
 use sp_runtime::{KeyTypeId, Vec};
 
-/// OnDemandAssignmentProvider OnDemandQueue
-pub const AFFINITY_ENTRIES: &[u8] =
-	&hex_literal::hex!["8f32430b49607f8d60bfd3a003ddf4b5ec3f20156dfc19e43db113f1ea70de12"];
-
-/// OnDemandAssignmentProvider FreeEntries
-pub const FREE_ENTRIES: &[u8] =
-	&hex_literal::hex!["8f32430b49607f8d60bfd3a003ddf4b5968068db4a3d745e5ad373dedebe4b81"];
-
 /// OnDemandAssignmentProvider QueueStatus
 pub const QUEUE_STATUS: &[u8] =
 	&hex_literal::hex!["8f32430b49607f8d60bfd3a003ddf4b58bf29330833ea7904c7209f4ce9d917a"];
@@ -60,13 +52,6 @@ pub fn session_key_owner(key_type: KeyTypeId, acc: Vec<u8>) -> Vec<u8> {
 pub fn core_descriptor(core_index: CoreIndex) -> Vec<u8> {
 	core_index.using_encoded(|core_index: &[u8]| {
 		CORE_DESCRIPTORS.iter().chain(twox_256(core_index).iter()).cloned().collect()
-	})
-}
-
-/// Returns the storage key for a specific affinity entry.
-pub fn affinity_entry(core_index: CoreIndex) -> Vec<u8> {
-	core_index.using_encoded(|core_index: &[u8]| {
-		AFFINITY_ENTRIES.iter().chain(twox_64(core_index).iter()).cloned().collect()
 	})
 }
 

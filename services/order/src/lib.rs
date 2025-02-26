@@ -4,7 +4,7 @@
 
 use crate::{
 	chain::{
-		affinity_entries, get_spot_price, is_parathread, on_demand_cores_available,
+		get_spot_price, is_parathread, on_demand_cores_available,
 		polkadot::on_demand_assignment_provider::events::OnDemandOrderPlaced,
 	},
 	config::{OnDemandConfig, OrderCriteria},
@@ -15,9 +15,7 @@ use cumulus_primitives_core::{
 };
 use cumulus_relay_chain_interface::{RelayChainInterface, RelayChainResult};
 use futures::{lock::Mutex, pin_mut, select, FutureExt, Stream, StreamExt};
-use order_primitives::{
-	well_known_keys::FREE_ENTRIES, EnqueuedOrder, OnDemandRuntimeApi, OrderRecord,
-};
+use order_primitives::{OnDemandRuntimeApi, OrderRecord};
 use polkadot_primitives::OccupiedCoreAssumption;
 use sc_service::TaskManager;
 use sp_api::ProvideRuntimeApi;
@@ -297,35 +295,21 @@ where
 		return Ok(());
 	}
 
-	let free_entries_storage = relay_chain.get_storage_by_key(r_hash, FREE_ENTRIES).await?;
-	let free_entries = free_entries_storage
-		.map(|raw| <Vec<EnqueuedOrder>>::decode(&mut &raw[..]))
-		.transpose()?;
+	let slot_width = parachain.runtime_api().slot_width(para_head.hash()).map_err(Box::new)?;
+	let current_slot = crate::config::current_slot(relay_height, slot_width);
 
-	let affinity = affinity_entries(&relay_chain, r_hash)
-		.await
-		.ok_or("Failed to get affinity entries")?;
-
-	let exists_in_affinity = affinity.into_iter().position(|e| e.para_id == para_id).is_some();
-	let exists_in_free = if let Some(entries) = free_entries {
-		entries.into_iter().position(|e| e.para_id == para_id).is_some()
-	} else {
-		false
-	};
-
-	let order_exists = exists_in_affinity || exists_in_free;
-
-	if order_exists {
+	let order_record_clone = order_record.clone();
+	let mut record = order_record_clone.lock().await;
+	if current_slot <= record.last_slot {
 		log::info!(
 			target: LOG_TARGET,
-			"Order in queue ⏳"
+			"Order already placed ⏳"
 		);
 
 		return Ok(());
 	}
 
 	let authorities = parachain.runtime_api().authorities(para_head.hash()).map_err(Box::new)?;
-	let slot_width = parachain.runtime_api().slot_width(para_head.hash()).map_err(Box::new)?;
 	let order_placer =
 		crate::config::order_placer::<Config>(authorities, relay_height, slot_width)?.clone();
 
@@ -363,9 +347,8 @@ where
 	chain::submit_order(&relay_url, para_id, relay_height, slot_width, spot_price.into(), keystore)
 		.await?;
 
-	let order_record_clone = order_record.clone();
-	let mut record = order_record_clone.lock().await;
 	record.relay_block_hash = Some(r_hash);
+	record.last_slot = crate::config::current_slot(relay_height, slot_width);
 
 	Ok(())
 }
