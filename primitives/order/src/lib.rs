@@ -32,12 +32,8 @@ pub struct InherentData {
 pub struct OrderRecord {
 	/// The hash of the block in which the order was placed.
 	pub relay_block_hash: Option<H256>,
-}
-
-#[derive(Encode, Decode, Debug, PartialEq, Clone)]
-pub struct EnqueuedOrder {
-	/// Parachain ID
-	pub para_id: ParaId,
+	/// Last slot in which an order was placed.
+	pub last_slot: u32,
 }
 
 pub trait ThresholdParameterT:

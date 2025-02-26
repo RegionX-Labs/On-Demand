@@ -3,18 +3,14 @@
 use crate::RelayBlockNumber;
 use codec::Codec;
 use cumulus_relay_chain_interface::RelayChainInterface;
-use order_primitives::{OnDemandRuntimeApi, ThresholdParameterT};
+use order_primitives::ThresholdParameterT;
 use sc_client_api::UsageProvider;
 use sc_service::Arc;
 use sc_transaction_pool_api::MaintainedTransactionPool;
 use sp_api::ProvideRuntimeApi;
 use sp_application_crypto::RuntimeAppPublic;
-use sp_consensus_aura::AuraApi;
-use sp_core::{crypto::Pair as PairT, H256};
-use sp_runtime::traits::{
-	AtLeast32BitUnsigned, Block as BlockT, Debug, Header as HeaderT, MaybeDisplay, Member,
-	PhantomData,
-};
+use sp_core::H256;
+use sp_runtime::traits::{AtLeast32BitUnsigned, Block as BlockT, Debug, MaybeDisplay, Member};
 use std::{error::Error, fmt::Display};
 
 pub trait OnDemandConfig {
@@ -22,7 +18,7 @@ pub trait OnDemandConfig {
 	type OrderPlacementCriteria: OrderCriteria;
 
 	/// Author identifier.
-	type AuthorPub: Member + RuntimeAppPublic + Display + Send;
+	type AuthorPub: Member + RuntimeAppPublic + Display + Send + Codec;
 
 	/// Block type.
 	type Block: BlockT<Hash = H256>;
@@ -50,12 +46,6 @@ pub trait OnDemandConfig {
 
 	/// On-demand pallet threshold parameter.
 	type ThresholdParameter: ThresholdParameterT;
-
-	fn order_placer(
-		para: &Self::P,
-		relay_height: RelayBlockNumber,
-		para_header: <Self::Block as BlockT>::Header,
-	) -> Result<Self::AuthorPub, Box<dyn Error>>;
 }
 
 pub trait OrderCriteria {
@@ -72,58 +62,19 @@ pub trait OrderCriteria {
 	) -> bool;
 }
 
-pub struct OnDemandSlot<R, P, Block, Pair, ExPool, Balance, C, T>(
-	PhantomData<(R, P, Block, Pair, ExPool, Balance, C, T)>,
-);
-#[async_trait::async_trait]
-impl<P, R, Block, Pair, ExPool, Balance, Criteria, Threshold> OnDemandConfig
-	for OnDemandSlot<R, P, Block, Pair, ExPool, Balance, Criteria, Threshold>
-where
-	R: RelayChainInterface + Clone + Sync + Send,
-	P: ProvideRuntimeApi<Block> + UsageProvider<Block> + Sync + Send,
-	P::Api: AuraApi<Block, Pair::Public>
-		+ OnDemandRuntimeApi<Block, Balance, RelayBlockNumber, Threshold>,
-	Criteria: OrderCriteria,
-	Pair: PairT + 'static,
-	ExPool: MaintainedTransactionPool<Block = Block, Hash = <Block as BlockT>::Hash> + 'static,
-	Balance: Codec
-		+ MaybeDisplay
-		+ 'static
-		+ Debug
-		+ Send
-		+ Into<u128>
-		+ AtLeast32BitUnsigned
-		+ Copy
-		+ From<u128>,
-	Pair::Public: RuntimeAppPublic + Display + Member + Codec,
-	Block: BlockT<Hash = H256>,
-	<<Block as BlockT>::Header as HeaderT>::Number: Into<u128>,
-	Threshold: ThresholdParameterT,
-{
-	type P = P;
-	type R = R;
+pub fn order_placer<Config: OnDemandConfig>(
+	authorities: Vec<Config::AuthorPub>,
+	relay_height: RelayBlockNumber,
+	slot_width: u32,
+) -> Result<Config::AuthorPub, Box<dyn Error>> {
+	// Taken from: https://github.com/paritytech/polkadot-sdk/issues/1487
+	let indx = current_slot(relay_height, slot_width) as u128 % authorities.len() as u128;
+	let author = authorities.get(indx as usize).ok_or("Failed to get selected collator")?;
 
-	type OrderPlacementCriteria = Criteria;
-	type AuthorPub = Pair::Public;
-	type Block = Block;
+	Ok(author.clone())
+}
 
-	type ExPool = ExPool;
-	type Balance = Balance;
-	type ThresholdParameter = Threshold;
-
-	fn order_placer(
-		para: &P,
-		relay_height: RelayBlockNumber,
-		para_header: <Self::Block as BlockT>::Header,
-	) -> Result<Self::AuthorPub, Box<dyn Error>> {
-		let para_hash = para_header.hash();
-		let authorities = para.runtime_api().authorities(para_hash).map_err(Box::new)?;
-		let slot_width = para.runtime_api().slot_width(para_hash).map_err(Box::new)?;
-
-		// Taken from: https://github.com/paritytech/polkadot-sdk/issues/1487
-		let indx = (relay_height >> slot_width) as u128 % authorities.len() as u128;
-		let author = authorities.get(indx as usize).ok_or("Failed to get selected collator")?;
-
-		Ok(author.clone())
-	}
+pub fn current_slot(relay_height: RelayBlockNumber, slot_width: u32) -> u32 {
+	let slot = relay_height >> slot_width;
+	slot
 }

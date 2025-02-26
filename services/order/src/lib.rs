@@ -4,7 +4,7 @@
 
 use crate::{
 	chain::{
-		affinity_entries, get_spot_price, is_parathread, on_demand_cores_available,
+		get_spot_price, is_parathread, on_demand_cores_available,
 		polkadot::on_demand_assignment_provider::events::OnDemandOrderPlaced,
 	},
 	config::{OnDemandConfig, OrderCriteria},
@@ -15,12 +15,11 @@ use cumulus_primitives_core::{
 };
 use cumulus_relay_chain_interface::{RelayChainInterface, RelayChainResult};
 use futures::{lock::Mutex, pin_mut, select, FutureExt, Stream, StreamExt};
-use order_primitives::{
-	well_known_keys::FREE_ENTRIES, EnqueuedOrder, OnDemandRuntimeApi, OrderRecord,
-};
+use order_primitives::{OnDemandRuntimeApi, OrderRecord};
 use polkadot_primitives::OccupiedCoreAssumption;
 use sc_service::TaskManager;
 use sp_api::ProvideRuntimeApi;
+use sp_consensus_aura::AuraApi;
 use sp_core::H256;
 use sp_keystore::KeystorePtr;
 use sp_runtime::{
@@ -51,11 +50,11 @@ where
 	Config::OrderPlacementCriteria:
 		OrderCriteria<P = Config::P, Block = Config::Block, ExPool = Config::ExPool>,
 	<<Config as OnDemandConfig>::P as ProvideRuntimeApi<Config::Block>>::Api: OnDemandRuntimeApi<
-		Config::Block,
-		Config::Balance,
-		RelayBlockNumber,
-		Config::ThresholdParameter,
-	>,
+			Config::Block,
+			Config::Balance,
+			RelayBlockNumber,
+			Config::ThresholdParameter,
+		> + AuraApi<Config::Block, Config::AuthorPub>,
 {
 	let mut url = String::from("ws://"); // <- TODO wss
 	url.push_str(
@@ -96,11 +95,11 @@ async fn run_on_demand_task<Config>(
 	Config::OrderPlacementCriteria:
 		OrderCriteria<P = Config::P, Block = Config::Block, ExPool = Config::ExPool>,
 	<<Config as OnDemandConfig>::P as ProvideRuntimeApi<Config::Block>>::Api: OnDemandRuntimeApi<
-		Config::Block,
-		Config::Balance,
-		RelayBlockNumber,
-		Config::ThresholdParameter,
-	>,
+			Config::Block,
+			Config::Balance,
+			RelayBlockNumber,
+			Config::ThresholdParameter,
+		> + AuraApi<Config::Block, Config::AuthorPub>,
 {
 	log::info!(
 		target: LOG_TARGET,
@@ -183,11 +182,11 @@ async fn follow_relay_chain<Config>(
 	Config::OrderPlacementCriteria:
 		OrderCriteria<P = Config::P, Block = Config::Block, ExPool = Config::ExPool>,
 	<<Config as OnDemandConfig>::P as ProvideRuntimeApi<Config::Block>>::Api: OnDemandRuntimeApi<
-		Config::Block,
-		Config::Balance,
-		RelayBlockNumber,
-		Config::ThresholdParameter,
-	>,
+			Config::Block,
+			Config::Balance,
+			RelayBlockNumber,
+			Config::ThresholdParameter,
+		> + AuraApi<Config::Block, Config::AuthorPub>,
 {
 	let new_best_heads = match new_best_heads(relay_chain.clone(), para_id).await {
 		Ok(best_heads_stream) => best_heads_stream.fuse(),
@@ -253,11 +252,11 @@ where
 	Config::OrderPlacementCriteria:
 		OrderCriteria<P = Config::P, Block = Config::Block, ExPool = Config::ExPool>,
 	<<Config as OnDemandConfig>::P as ProvideRuntimeApi<Config::Block>>::Api: OnDemandRuntimeApi<
-		Config::Block,
-		Config::Balance,
-		RelayBlockNumber,
-		Config::ThresholdParameter,
-	>,
+			Config::Block,
+			Config::Balance,
+			RelayBlockNumber,
+			Config::ThresholdParameter,
+		> + AuraApi<Config::Block, Config::AuthorPub>,
 {
 	let is_parathread = is_parathread(&relay_chain, r_hash, para_id).await?;
 
@@ -296,34 +295,23 @@ where
 		return Ok(());
 	}
 
-	let free_entries_storage = relay_chain.get_storage_by_key(r_hash, FREE_ENTRIES).await?;
-	let free_entries = free_entries_storage
-		.map(|raw| <Vec<EnqueuedOrder>>::decode(&mut &raw[..]))
-		.transpose()?;
+	let slot_width = parachain.runtime_api().slot_width(para_head.hash()).map_err(Box::new)?;
+	let current_slot = crate::config::current_slot(relay_height, slot_width);
 
-	let affinity = affinity_entries(&relay_chain, r_hash)
-		.await
-		.ok_or("Failed to get affinity entries")?;
-
-	let exists_in_affinity = affinity.into_iter().position(|e| e.para_id == para_id).is_some();
-	let exists_in_free = if let Some(entries) = free_entries {
-		entries.into_iter().position(|e| e.para_id == para_id).is_some()
-	} else {
-		false
-	};
-
-	let order_exists = exists_in_affinity || exists_in_free;
-
-	if order_exists {
+	let order_record_clone = order_record.clone();
+	let mut record = order_record_clone.lock().await;
+	if current_slot <= record.last_slot {
 		log::info!(
 			target: LOG_TARGET,
-			"Order in queue ⏳"
+			"Order already placed ⏳"
 		);
 
 		return Ok(());
 	}
 
-	let order_placer = Config::order_placer(parachain, relay_height, para_head)?.clone();
+	let authorities = parachain.runtime_api().authorities(para_head.hash()).map_err(Box::new)?;
+	let order_placer =
+		crate::config::order_placer::<Config>(authorities, relay_height, slot_width)?.clone();
 
 	if !keystore.has_keys(&[(order_placer.to_raw_vec(), sp_application_crypto::key_types::AURA)]) {
 		// Expected author is not in the keystore therefore we are not responsible for order
@@ -356,11 +344,11 @@ where
 		"Placing an order",
 	);
 
-	chain::submit_order(&relay_url, para_id, spot_price.into(), keystore).await?;
+	chain::submit_order(&relay_url, para_id, relay_height, slot_width, spot_price.into(), keystore)
+		.await?;
 
-	let order_record_clone = order_record.clone();
-	let mut record = order_record_clone.lock().await;
 	record.relay_block_hash = Some(r_hash);
+	record.last_slot = crate::config::current_slot(relay_height, slot_width);
 
 	Ok(())
 }

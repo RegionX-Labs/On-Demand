@@ -9,13 +9,13 @@ use crate::{
 			polkadot_runtime_parachains::assigner_coretime::CoreDescriptor,
 		},
 	},
-	EnqueuedOrder,
+	RelayBlockNumber,
 };
 use codec::{Codec, Decode};
 use cumulus_primitives_core::{relay_chain::CoreIndex, ParaId};
 use cumulus_relay_chain_interface::RelayChainInterface;
 use order_primitives::well_known_keys::{
-	affinity_entry, core_descriptor, para_lifecycle, ACTIVE_CONFIG, QUEUE_STATUS,
+	core_descriptor, para_lifecycle, ACTIVE_CONFIG, QUEUE_STATUS,
 };
 use polkadot_runtime_parachains::{configuration::HostConfiguration, ParaLifecycle};
 use sp_application_crypto::AppCrypto;
@@ -26,7 +26,13 @@ use sp_runtime::{
 	MultiSignature as SpMultiSignature, SaturatedConversion,
 };
 use std::{error::Error, fmt::Debug};
-use subxt::{tx::Signer, utils::MultiSignature, Config, OnlineClient, PolkadotConfig};
+use subxt::{
+	backend::{legacy::LegacyRpcMethods, rpc::RpcClient},
+	config::DefaultExtrinsicParamsBuilder as Params,
+	tx::Signer,
+	utils::MultiSignature,
+	Config, OnlineClient, PolkadotConfig,
+};
 
 #[subxt::subxt(runtime_metadata_path = "../../artifacts/metadata.scale")]
 pub mod polkadot {}
@@ -98,19 +104,36 @@ where
 pub async fn submit_order(
 	url: &str,
 	para_id: ParaId,
+	relay_height: RelayBlockNumber,
+	slot_width: u32,
 	max_amount: u128,
 	keystore: KeystorePtr,
 ) -> Result<(), Box<dyn Error>> {
 	let client = OnlineClient::<PolkadotConfig>::from_url(url).await?;
+	let rpc_client = RpcClient::from_url(url).await?;
+
+	let rpc = LegacyRpcMethods::<PolkadotConfig>::new(rpc_client.clone());
 
 	let place_order = polkadot::tx()
 		.on_demand_assignment_provider()
 		.place_order_allow_death(max_amount, Id(para_id.into()));
 
 	let signer_keystore = SignerKeystore::<PolkadotConfig>::new(keystore.clone());
+	let first_block_in_slot = crate::config::current_slot(relay_height, slot_width) << slot_width;
 
-	// TODO: Ideally the transaction should only be valid for one slot.
-	let submit_result = client.tx().sign_and_submit_default(&place_order, &signer_keystore).await;
+	let block_hash = rpc
+		.chain_get_block_hash(Some(first_block_in_slot.into()))
+		.await?
+		.ok_or("Failed to get hash of slot starting block")?;
+
+	let block = client.blocks().at(block_hash).await?;
+
+	let mortality = 1u32 << slot_width;
+
+	let tx_params = Params::new().mortal(block.header(), mortality.into()).build();
+	let submit_result =
+		client.tx().sign_and_submit(&place_order, &signer_keystore, tx_params).await;
+
 	log::info!("submit_result: {:?}", submit_result);
 	submit_result?;
 
@@ -164,38 +187,6 @@ pub async fn is_parathread(
 
 	let is_parathread = para_lifecycle == Some(ParaLifecycle::Parathread);
 	Ok(is_parathread)
-}
-
-pub async fn affinity_entries(
-	relay_chain: &(impl RelayChainInterface + Clone),
-	hash: H256,
-) -> Option<Vec<EnqueuedOrder>> {
-	let active_config_storage = relay_chain.get_storage_by_key(hash, ACTIVE_CONFIG).await.ok()?;
-	let active_config = active_config_storage
-		.map(|raw| <HostConfiguration<u32>>::decode(&mut &raw[..]))
-		.transpose()
-		.ok()?;
-
-	let active_config = active_config?;
-
-	let mut entries = vec![];
-	for core in 0..active_config.scheduler_params.num_cores {
-		let affinity_entry_storage = relay_chain
-			.get_storage_by_key(hash, &affinity_entry(CoreIndex(core)))
-			.await
-			.ok()?;
-
-		let affinity_entry = affinity_entry_storage
-			.map(|raw| <EnqueuedOrder>::decode(&mut &raw[..]))
-			.transpose()
-			.ok()?;
-
-		if let Some(entry) = affinity_entry {
-			entries.push(entry)
-		}
-	}
-
-	Some(entries)
 }
 
 /// Checks if there are any cores allocated to on-demand.

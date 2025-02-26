@@ -35,10 +35,7 @@ use codec::Encode;
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
 use futures::lock::Mutex;
 use order_primitives::{OnDemandRuntimeApi, OrderRecord};
-use order_service::{
-	config::{OnDemandSlot, OrderCriteria},
-	start_on_demand,
-};
+use order_service::{config::OrderCriteria, start_on_demand};
 use polkadot_primitives::Balance;
 use polkadot_sdk::{
 	pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi, polkadot_cli::ProvideRuntimeApi,
@@ -74,16 +71,17 @@ pub type Service = PartialComponents<
 	(ParachainBlockImport, Option<Telemetry>, Option<TelemetryWorkerHandle>),
 >;
 
-type OnDemandConfig = OnDemandSlot<
-	Arc<dyn RelayChainInterface>,
-	ParachainClient,
-	Block,
-	AuthorityPair,
-	sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient>,
-	Balance,
-	FeeBasedCriteria,
-	Balance,
->;
+pub struct OnDemandConfig;
+impl order_service::config::OnDemandConfig for OnDemandConfig {
+	type OrderPlacementCriteria = FeeBasedCriteria;
+	type AuthorPub = <AuthorityPair as polkadot_sdk::sp_application_crypto::AppCrypto>::Public;
+	type Block = Block;
+	type R = Arc<dyn RelayChainInterface>;
+	type P = ParachainClient;
+	type ExPool = sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient>;
+	type Balance = Balance;
+	type ThresholdParameter = Balance;
+}
 
 // https://github.com/paritytech/cumulus/issues/2154
 pub struct FeeBasedCriteria;
@@ -485,7 +483,8 @@ pub async fn start_parachain_node(
 
 	if validator {
 		// Keep the order record in memory.
-		let order_record = Arc::new(Mutex::new(OrderRecord { relay_block_hash: None }));
+		let order_record =
+			Arc::new(Mutex::new(OrderRecord { relay_block_hash: None, last_slot: 0 }));
 		start_on_demand::<OnDemandConfig>(
 			client.clone(),
 			para_id,
