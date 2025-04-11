@@ -6,7 +6,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use cumulus_pallet_parachain_system::RelayChainStateProof;
-use cumulus_primitives_core::ParaId;
+use cumulus_primitives_core::{relay_chain::BlockNumber as RelayBlockNumber, ParaId};
 use frame_support::{
 	pallet_prelude::*,
 	traits::{fungible::Inspect, tokens::Balance as BalanceT},
@@ -56,6 +56,7 @@ pub trait OrdersPlaced<Balance, Account> {
 	///
 	/// Arguments:
 	/// - `relay_state_proof`: state proof from which the events are read.
+	/// - `expected_para_id`: para id for which an order was supposedly made.
 	fn orders_placed(
 		relay_state_proof: RelayChainStateProof,
 		expected_para_id: ParaId,
@@ -76,6 +77,7 @@ pub mod pallet {
 		DefaultNoBound,
 	};
 	use order_primitives::OrderInherentData;
+	use sp_core::H256;
 	use sp_runtime::{
 		traits::{AtLeast32BitUnsigned, Convert},
 		AccountId32, RuntimeAppPublic,
@@ -283,6 +285,7 @@ pub mod pallet {
 				return Ok(().into());
 			};
 
+			// TODO: remove `BulkMode`.
 			if BulkMode::<T>::get().is_some() {
 				return Ok(().into());
 			}
@@ -388,6 +391,87 @@ pub mod pallet {
 			}
 
 			Self::deposit_event(Event::BulkModeSet { bulk_mode });
+
+			Ok(())
+		}
+
+		/// Manually claim reward for placing an order.
+		///
+		/// Parameters:
+		/// - `origin`: Unsigned origin.
+		/// - `order_placer`: Authority that supposedly placed an order.
+		/// - `relay_proof`: Proof that an order was placed.
+		/// - `relay_state_root`: State root related to the proof.
+		/// - `relay_height`: Block number at which the order was supposedly placed.
+		/// - `para_id`: ParaId of the parachain.
+		#[pallet::call_index(4)]
+		#[pallet::weight(<T as pallet::Config>::WeightInfo::set_bulk_mode())]
+		pub fn claim_reward(
+			origin: OriginFor<T>,
+			order_placer: T::AuthorityId,
+			relay_storage_proof: sp_trie::StorageProof,
+			relay_state_root: H256,
+			relay_height: RelayBlockNumber,
+			para_id: ParaId,
+		) -> DispatchResult {
+			ensure_none(origin)?;
+
+			// We need a checkpoint so the ancestry proof is not too long.
+
+			// TODO: Authorities AT specific height.
+			if Authorities::<T>::get().len().is_zero() {
+				return Ok(().into());
+			}
+
+			// TODO: should_place_order_at
+			if !T::OrderPlacementCriteria::should_place_order() {
+				// Was not supposed to place an order.
+				//
+				// Short-circuit: the order placer doesn't get rewarded.
+				return Ok(().into());
+			}
+
+			// TODO: keep track of slots at which order placers were rewarded.
+			// NOTE: the history should not go further than the checkpoint.
+			let slot = Self::slot_at(relay_height);
+			if slot <= PreviousSlot::<T>::get() {
+				// The order placer doesn't get rewarded multiple times for blocks produced in the
+				// same slot.
+				return Ok(().into())
+			}
+
+			// TODO: ancestry proof ensuring the proof is actually part of a block from the
+			// canocical block chain.
+
+			// Checking the proof:
+
+			let relay_state_proof =
+				RelayChainStateProof::new(para_id, relay_state_root, relay_storage_proof)
+					.expect("Invalid relay chain state proof");
+
+			let result = T::OrdersPlaced::orders_placed(relay_state_proof, para_id);
+
+			let Some(order_placer) = Self::order_placer_at(relay_height) else {
+				return Ok(().into());
+			};
+
+			let order_placer_acc = pallet_session::KeyOwner::<T>::get((
+				sp_application_crypto::key_types::AURA,
+				order_placer.to_raw_vec(),
+			))
+			.ok_or(Error::<T>::FailedToGetOrderPlacerAccount)?;
+
+			if !result.into_iter().any(|(_, ordered_by)| {
+				// In most implementations the validator id is same as account id.
+				<T as pallet_session::Config>::ValidatorIdOf::convert(ordered_by.clone()) ==
+					Some(order_placer_acc.clone())
+			}) {
+				return Ok(().into());
+			};
+
+			T::OnReward::reward(T::ToAccountId::convert(order_placer_acc));
+
+			// TODO: Set that the order placer for `slot` was rewarded.
 
 			Ok(())
 		}
