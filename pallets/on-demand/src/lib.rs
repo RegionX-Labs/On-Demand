@@ -14,6 +14,7 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 use pallet_transaction_payment::OnChargeTransaction;
 use sp_runtime::{FixedPointNumber, SaturatedConversion, Saturating};
+use sp_staking::SessionIndex;
 
 pub use pallet::*;
 
@@ -143,6 +144,10 @@ pub mod pallet {
 		/// Type implementing the logic to check if an order was placed and extracting data from it.
 		type OrdersPlaced: OrdersPlaced<BalanceOf<Self>, Self::AccountId>;
 
+		/// Max number of sessions to keep in history.
+        #[pallet::constant]
+        type MaxSessionHistory: Get<u32>;
+
 		#[cfg(feature = "runtime-benchmarks")]
 		type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
 
@@ -153,11 +158,19 @@ pub mod pallet {
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
 
-	/// The authorities for the current on-demand slot.
-	#[pallet::storage]
-	#[pallet::getter(fn authorities)]
-	pub type Authorities<T: Config> =
-		StorageValue<_, BoundedVec<T::AuthorityId, T::MaxAuthorities>, ValueQuery>;
+	/// Map: session index -> snapshot of Aura authorities for that session.
+    #[pallet::storage]
+    pub type AuthoritiesHistory<T: Config> = StorageMap<
+        _, 
+        Blake2_128Concat, 
+        SessionIndex, 
+        BoundedVec<T::AuthorityId, T::MaxAuthorities>, 
+        OptionQuery
+    >;
+
+    /// Last session index we’ve snapshotted (to avoid re-writing).
+    #[pallet::storage]
+    pub type LastStoredSession<T: Config> = StorageValue<_, SessionIndex, ValueQuery>;
 
 	/// Defines how often a new on-demand order is created, based on the number of slots.
 	///
@@ -236,11 +249,25 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_finalize(_: BlockNumberFor<T>) {
-			// Update to the latest AuRa authorities.
-			//
-			// By updating the authorities on finalize we will always have the previous set
-			// from the previous block used within this pallet.
-			Authorities::<T>::put(pallet_aura::Authorities::<T>::get());
+			// Snapshot once per session (cheap check every block).
+            let current = pallet_session::Pallet::<T>::current_index();
+            if current == LastStoredSession::<T>::get() && current != SessionIndex::zero() {
+                return; // already snapshotted this session
+            }
+
+			// Snapshot current Aura authorities.
+            let auths: BoundedVec<T::AuthorityId, T::MaxAuthorities> = pallet_aura::Authorities::<T>::get();
+
+            AuthoritiesHistory::<T>::insert(current, auths);
+
+            // Prune the session that just fell out of the sliding window.
+            let max = T::MaxSessionHistory::get();
+            if (current as u64) > (max as u64) {
+                let to_remove = current.saturating_sub(max as SessionIndex);
+                AuthoritiesHistory::<T>::remove(to_remove);
+            }
+
+            LastStoredSession::<T>::put(current);
 		}
 	}
 
@@ -289,7 +316,7 @@ pub mod pallet {
 			if BulkMode::<T>::get().is_some() {
 				return Ok(().into());
 			}
-			if Authorities::<T>::get().len().is_zero() {
+			if Self::latest_authorities().len().is_zero() {
 				return Ok(().into());
 			}
 
@@ -416,10 +443,16 @@ pub mod pallet {
 		) -> DispatchResult {
 			ensure_none(origin)?;
 
+			// NOTE: maybe think of a solution that doesn't require any ancestry proof.
+			// NOTE: AT would be at a specific relay chain height.
+
+			// Basically, if we are already going to store Authorities AT specific height
+			// and should_place_order_at then we could instead just 
+
 			// We need a checkpoint so the ancestry proof is not too long.
 
 			// TODO: Authorities AT specific height.
-			if Authorities::<T>::get().len().is_zero() {
+			if Self::latest_authorities().len().is_zero() {
 				return Ok(().into());
 			}
 
@@ -478,8 +511,14 @@ pub mod pallet {
 	}
 
 	impl<T: Config> Pallet<T> {
+		pub fn latest_authorities() -> BoundedVec<T::AuthorityId, T::MaxAuthorities> {
+            let idx = LastStoredSession::<T>::get();
+            AuthoritiesHistory::<T>::get(idx).unwrap_or_default()
+        }
+
 		fn order_placer_at(relay_height: relay_chain::BlockNumber) -> Option<T::AuthorityId> {
-			let authorities = Authorities::<T>::get();
+			// TODO: don't use latest authorities.
+			let authorities = Self::latest_authorities();
 
 			let slot = Self::slot_at(relay_height);
 			let indx = slot % authorities.len() as u128;
