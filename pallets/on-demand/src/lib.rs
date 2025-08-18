@@ -224,6 +224,8 @@ pub mod pallet {
 		FailedToGetOrderPlacerAccount,
 		/// We failed to decode inherent data.
 		FailedToDecodeInherentData,
+		/// Account not in authority set
+		NotInAuthoritySet,
 	}
 
 	#[pallet::genesis_config]
@@ -427,6 +429,7 @@ pub mod pallet {
 		/// Parameters:
 		/// - `origin`: Unsigned origin.
 		/// - `order_placer`: Authority that supposedly placed an order.
+		/// - `placer_at_session`: Session in which the placer placed the order. Used to verify that the placer was in the authorities set.
 		/// - `relay_proof`: Proof that an order was placed.
 		/// - `relay_state_root`: State root related to the proof.
 		/// - `relay_height`: Block number at which the order was supposedly placed.
@@ -436,6 +439,7 @@ pub mod pallet {
 		pub fn claim_reward(
 			origin: OriginFor<T>,
 			order_placer: T::AuthorityId,
+			placer_at_session: SessionIndex,
 			relay_storage_proof: sp_trie::StorageProof,
 			relay_state_root: H256,
 			relay_height: RelayBlockNumber,
@@ -451,12 +455,29 @@ pub mod pallet {
 
 			// We need a checkpoint so the ancestry proof is not too long.
 
-			// TODO: Authorities AT specific height.
-			if Self::latest_authorities().len().is_zero() {
+			let Some(authorities_at) = AuthoritiesHistory::<T>::get(placer_at_session) else {
 				return Ok(().into());
-			}
+			};
+			ensure!(authorities_at.contains(&order_placer), Error::<T>::NotInAuthoritySet);
 
 			// TODO: should_place_order_at
+			// NOTE: this one is a bit of a tricky one.
+			// We need to know in which context this was executed.
+			// Basically, we need the parachain block in which the order placer was supposed to get
+			// rewarded.
+
+			// We can't really provde the entire context. Instead the implementation should specify
+			// the context based on which it determines whether order should be placed.
+			// This should be stored in history and then provided in such cases.
+
+			// IF we have ancestry proof in the `create_order` extrinsic do we actually need manual
+			// reward claiming?
+
+			// Basically, the author must provide proof that the block in which the order was placed
+			// is part of the relay chain.
+			// Can they omit the order placement event proof? Yes they can, they can just say it was
+			// not part of it and provide not proof that the order was placed.
+			// It cannot really be required(right)?
 			if !T::OrderPlacementCriteria::should_place_order() {
 				// Was not supposed to place an order.
 				//
