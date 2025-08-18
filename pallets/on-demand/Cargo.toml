@@ -18,7 +18,10 @@ frame-system = { workspace = true, default-features = false }
 frame-support = { workspace = true, default-features = false }
 frame-benchmarking = { workspace = true, default-features = false, optional = true }
 sp-application-crypto = { workspace = true, default-features = false }
+sp-core = { workspace = true, default-features = false }
 sp-runtime = { workspace = true, default-features = false }
+sp-trie = { workspace = true, default-features = false }
+sp-staking = { workspace = true, default-features = false }
 pallet-aura = { workspace = true, default-features = false }
 pallet-session = { workspace = true, default-features = false }
 pallet-staking = { workspace = true, default-features = false }
@@ -37,7 +40,6 @@ cumulus-pallet-parachain-system = { workspace = true, default-features = false }
 order-primitives = { workspace = true, default-features = false }
 
 [dev-dependencies]
-sp-core = { workspace = true, default-features = false }
 sp-io = { workspace = true, default-features = false }
 sp-consensus-aura = { workspace = true, default-features = false }
 sp-keyring = { workspace = true, default-features = false }
@@ -67,7 +69,9 @@ std = [
 	"sp-core/std",
 	"sp-consensus-aura/std",
 	"sp-io/std",
+	"sp-trie/std",
 	"sp-keyring/std",
+	"sp-staking/std",
 	"pallet-aura/std",
 	"pallet-balances/std",
 	"pallet-collator-selection/std",

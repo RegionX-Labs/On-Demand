@@ -6,7 +6,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use cumulus_pallet_parachain_system::RelayChainStateProof;
-use cumulus_primitives_core::ParaId;
+use cumulus_primitives_core::{relay_chain::BlockNumber as RelayBlockNumber, ParaId};
 use frame_support::{
 	pallet_prelude::*,
 	traits::{fungible::Inspect, tokens::Balance as BalanceT},
@@ -14,6 +14,7 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 use pallet_transaction_payment::OnChargeTransaction;
 use sp_runtime::{FixedPointNumber, SaturatedConversion, Saturating};
+use sp_staking::SessionIndex;
 
 pub use pallet::*;
 
@@ -56,6 +57,7 @@ pub trait OrdersPlaced<Balance, Account> {
 	///
 	/// Arguments:
 	/// - `relay_state_proof`: state proof from which the events are read.
+	/// - `expected_para_id`: para id for which an order was supposedly made.
 	fn orders_placed(
 		relay_state_proof: RelayChainStateProof,
 		expected_para_id: ParaId,
@@ -76,6 +78,7 @@ pub mod pallet {
 		DefaultNoBound,
 	};
 	use order_primitives::OrderInherentData;
+	use sp_core::H256;
 	use sp_runtime::{
 		traits::{AtLeast32BitUnsigned, Convert},
 		AccountId32, RuntimeAppPublic,
@@ -141,6 +144,10 @@ pub mod pallet {
 		/// Type implementing the logic to check if an order was placed and extracting data from it.
 		type OrdersPlaced: OrdersPlaced<BalanceOf<Self>, Self::AccountId>;
 
+		/// Max number of sessions to keep in history.
+        #[pallet::constant]
+        type MaxSessionHistory: Get<u32>;
+
 		#[cfg(feature = "runtime-benchmarks")]
 		type BenchmarkHelper: crate::BenchmarkHelper<Self::ThresholdParameter>;
 
@@ -151,11 +158,19 @@ pub mod pallet {
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
 
-	/// The authorities for the current on-demand slot.
-	#[pallet::storage]
-	#[pallet::getter(fn authorities)]
-	pub type Authorities<T: Config> =
-		StorageValue<_, BoundedVec<T::AuthorityId, T::MaxAuthorities>, ValueQuery>;
+	/// Map: session index -> snapshot of Aura authorities for that session.
+    #[pallet::storage]
+    pub type AuthoritiesHistory<T: Config> = StorageMap<
+        _, 
+        Blake2_128Concat, 
+        SessionIndex, 
+        BoundedVec<T::AuthorityId, T::MaxAuthorities>, 
+        OptionQuery
+    >;
+
+    /// Last session index we’ve snapshotted (to avoid re-writing).
+    #[pallet::storage]
+    pub type LastStoredSession<T: Config> = StorageValue<_, SessionIndex, ValueQuery>;
 
 	/// Defines how often a new on-demand order is created, based on the number of slots.
 	///
@@ -209,6 +224,8 @@ pub mod pallet {
 		FailedToGetOrderPlacerAccount,
 		/// We failed to decode inherent data.
 		FailedToDecodeInherentData,
+		/// Account not in authority set
+		NotInAuthoritySet,
 	}
 
 	#[pallet::genesis_config]
@@ -234,11 +251,25 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_finalize(_: BlockNumberFor<T>) {
-			// Update to the latest AuRa authorities.
-			//
-			// By updating the authorities on finalize we will always have the previous set
-			// from the previous block used within this pallet.
-			Authorities::<T>::put(pallet_aura::Authorities::<T>::get());
+			// Snapshot once per session (cheap check every block).
+            let current = pallet_session::Pallet::<T>::current_index();
+            if current == LastStoredSession::<T>::get() && current != SessionIndex::zero() {
+                return; // already snapshotted this session
+            }
+
+			// Snapshot current Aura authorities.
+            let auths: BoundedVec<T::AuthorityId, T::MaxAuthorities> = pallet_aura::Authorities::<T>::get();
+
+            AuthoritiesHistory::<T>::insert(current, auths);
+
+            // Prune the session that just fell out of the sliding window.
+            let max = T::MaxSessionHistory::get();
+            if (current as u64) > (max as u64) {
+                let to_remove = current.saturating_sub(max as SessionIndex);
+                AuthoritiesHistory::<T>::remove(to_remove);
+            }
+
+            LastStoredSession::<T>::put(current);
 		}
 	}
 
@@ -283,10 +314,11 @@ pub mod pallet {
 				return Ok(().into());
 			};
 
+			// TODO: remove `BulkMode`.
 			if BulkMode::<T>::get().is_some() {
 				return Ok(().into());
 			}
-			if Authorities::<T>::get().len().is_zero() {
+			if Self::latest_authorities().len().is_zero() {
 				return Ok(().into());
 			}
 
@@ -391,11 +423,123 @@ pub mod pallet {
 
 			Ok(())
 		}
+
+		/// Manually claim reward for placing an order.
+		///
+		/// Parameters:
+		/// - `origin`: Unsigned origin.
+		/// - `order_placer`: Authority that supposedly placed an order.
+		/// - `placer_at_session`: Session in which the placer placed the order. Used to verify that the placer was in the authorities set.
+		/// - `relay_proof`: Proof that an order was placed.
+		/// - `relay_state_root`: State root related to the proof.
+		/// - `relay_height`: Block number at which the order was supposedly placed.
+		/// - `para_id`: ParaId of the parachain.
+		#[pallet::call_index(4)]
+		#[pallet::weight(<T as pallet::Config>::WeightInfo::set_bulk_mode())]
+		pub fn claim_reward(
+			origin: OriginFor<T>,
+			order_placer: T::AuthorityId,
+			placer_at_session: SessionIndex,
+			relay_storage_proof: sp_trie::StorageProof,
+			relay_state_root: H256,
+			relay_height: RelayBlockNumber,
+			para_id: ParaId,
+		) -> DispatchResult {
+			ensure_none(origin)?;
+
+			// NOTE: maybe think of a solution that doesn't require any ancestry proof.
+			// NOTE: AT would be at a specific relay chain height.
+
+			// Basically, if we are already going to store Authorities AT specific height
+			// and should_place_order_at then we could instead just 
+
+			// We need a checkpoint so the ancestry proof is not too long.
+
+			let Some(authorities_at) = AuthoritiesHistory::<T>::get(placer_at_session) else {
+				return Ok(().into());
+			};
+			ensure!(authorities_at.contains(&order_placer), Error::<T>::NotInAuthoritySet);
+
+			// TODO: should_place_order_at
+			// NOTE: this one is a bit of a tricky one.
+			// We need to know in which context this was executed.
+			// Basically, we need the parachain block in which the order placer was supposed to get
+			// rewarded.
+
+			// We can't really provde the entire context. Instead the implementation should specify
+			// the context based on which it determines whether order should be placed.
+			// This should be stored in history and then provided in such cases.
+
+			// IF we have ancestry proof in the `create_order` extrinsic do we actually need manual
+			// reward claiming?
+
+			// Basically, the author must provide proof that the block in which the order was placed
+			// is part of the relay chain.
+			// Can they omit the order placement event proof? Yes they can, they can just say it was
+			// not part of it and provide not proof that the order was placed.
+			// It cannot really be required(right)?
+			if !T::OrderPlacementCriteria::should_place_order() {
+				// Was not supposed to place an order.
+				//
+				// Short-circuit: the order placer doesn't get rewarded.
+				return Ok(().into());
+			}
+
+			// TODO: keep track of slots at which order placers were rewarded.
+			// NOTE: the history should not go further than the checkpoint.
+			let slot = Self::slot_at(relay_height);
+			if slot <= PreviousSlot::<T>::get() {
+				// The order placer doesn't get rewarded multiple times for blocks produced in the
+				// same slot.
+				return Ok(().into())
+			}
+
+			// TODO: ancestry proof ensuring the proof is actually part of a block from the
+			// canocical block chain.
+
+			// Checking the proof:
+
+			let relay_state_proof =
+				RelayChainStateProof::new(para_id, relay_state_root, relay_storage_proof)
+					.expect("Invalid relay chain state proof");
+
+			let result = T::OrdersPlaced::orders_placed(relay_state_proof, para_id);
+
+			let Some(order_placer) = Self::order_placer_at(relay_height) else {
+				return Ok(().into());
+			};
+
+			let order_placer_acc = pallet_session::KeyOwner::<T>::get((
+				sp_application_crypto::key_types::AURA,
+				order_placer.to_raw_vec(),
+			))
+			.ok_or(Error::<T>::FailedToGetOrderPlacerAccount)?;
+
+			if !result.into_iter().any(|(_, ordered_by)| {
+				// In most implementations the validator id is same as account id.
+				<T as pallet_session::Config>::ValidatorIdOf::convert(ordered_by.clone()) ==
+					Some(order_placer_acc.clone())
+			}) {
+				return Ok(().into());
+			};
+
+			T::OnReward::reward(T::ToAccountId::convert(order_placer_acc));
+
+			// TODO: Set that the order placer for `slot` was rewarded.
+
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
+		pub fn latest_authorities() -> BoundedVec<T::AuthorityId, T::MaxAuthorities> {
+            let idx = LastStoredSession::<T>::get();
+            AuthoritiesHistory::<T>::get(idx).unwrap_or_default()
+        }
+
 		fn order_placer_at(relay_height: relay_chain::BlockNumber) -> Option<T::AuthorityId> {
-			let authorities = Authorities::<T>::get();
+			// TODO: don't use latest authorities.
+			let authorities = Self::latest_authorities();
 
 			let slot = Self::slot_at(relay_height);
 			let indx = slot % authorities.len() as u128;
